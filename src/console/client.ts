@@ -1,0 +1,470 @@
+/**
+ * VTuber 演出模组的浏览器插件 —— 挂载 / 模型档案 / Overlay / 动作调参 / 声线档案 /
+ * 时间点标注 / 离线歌曲 / 演出日志 / 演出诊断九个面板。
+ *
+ * 这个文件只做两件事:**装配**(把面板接到局部 id 上)与**共享 helper**
+ * (类型、错误措辞、几个输入与资源生命周期包装)。面板本体各在自己的文件里。
+ *
+ * 与外界的依赖只有一条:`client-plugin.ts` 里的**类型**与 `toDisposable`。没有
+ * import 控制台内部模块,没有 `fetch`,没有 `document.body`,没有 `window.__*`——
+ * 数据面一律走 `ctx.invoke` / `ctx.invokeBinary`,DOM 一律用 `ctx.ui` 的原语,
+ * 定时器一律走 `ctx.interval`,RAF 走 `ctx.frame`,ObjectURL / AudioContext /
+ * ResizeObserver / `<audio>` 一律交给 `ctx.own`。
+ *
+ * `style.css` 是本 provider 自己的样式:只放 `ctx.ui` 没有对应原语的那几块
+ * (挂载行、几个要定宽的数字框、色板输入、overlay 预览窗、波形画布),用 `vt-`
+ * 前缀避开控制台的通用 class,颜色取自控制台的主题变量,所以浅深色两套皮都跟着走。
+ */
+
+import { toDisposable } from '../../web/shared/client-plugin.ts';
+import type {
+  ConsoleClientPlugin,
+  ConsolePanelContext,
+  Disposable,
+} from '../../web/shared/client-plugin.ts';
+import './style.css';
+import { mountPanel } from './mount.ts';
+import { modelPanel } from './model.ts';
+import { overlayPanel } from './overlay.ts';
+import { clipsPanel } from './clips.ts';
+import { ttsPanel } from './tts.ts';
+import { alignPanel } from './align.ts';
+import { logPanel } from './log.ts';
+import { diagPanel } from './diag.ts';
+
+// ---------------------------------------------------------------------------
+// 共享类型:服务端 `VtuberModuleProxy.invokePanel` 各方法的返回形状
+// ---------------------------------------------------------------------------
+
+/** `mount.vtsState`(也是 `mount.state` 里的 `vts` 一支) */
+export interface VtsState {
+  connected: boolean;
+  url: string;
+  /** 已持有授权 token;没有的话连接时 VTS 会弹授权窗 */
+  tokenSet: boolean;
+  model: { name: string; id: string } | null;
+}
+
+/** `mount.ttsState`(也是 `mount.state` 里的 `tts` 一支) */
+export interface TtsState {
+  phase: 'stopped' | 'starting' | 'running' | 'error' | string;
+  url: string;
+  pid: number | null;
+  detail: string | null;
+  reachable?: boolean;
+  resources: {
+    server: { path: string; ready: boolean };
+    baseLm: { path: string; ready: boolean; configured: boolean };
+    acoustic: { path: string; ready: boolean; configured: boolean };
+    alignerLm: { path: string; ready: boolean; configured: boolean };
+    alignerAudio: { path: string; ready: boolean; configured: boolean };
+    alignerRequired: boolean;
+    alignerReady: boolean;
+    ready: boolean;
+  };
+}
+
+/** `mount.state`:三条链路一次问齐。某一条拿不到就是 null(那一行显示"不可用")。 */
+export interface MountState {
+  vts: VtsState | null;
+  tts: TtsState | null;
+  stream: { up: boolean; url: string | null } | null;
+}
+
+/** `model.state` */
+export interface ModelState {
+  configured: string;
+  activeId: string;
+  activeLabel: string;
+  how: 'configured' | 'matched' | 'fallback' | 'missing';
+  vtsModelName: string;
+  vtsConnected: boolean;
+  /** VTube Studio 的 Live2DModels 目录;档案在它的子目录里发现 */
+  live2dDir: string;
+  profileFile: string | null;
+  registryErrors: Array<{ file: string; message: string }>;
+  modelFile: { vtubeFile: string | null; warnings: string[] } | null;
+  /** 当前演出包目录 */
+  packDir: string;
+  /** 生效档案与演出包对不上的条目 */
+  profileWarnings: string[];
+  choices: Array<{ value: string; label: string; vtsModelName: string }>;
+  caveat: string | null;
+  unsupported: string[];
+  lastCheck: WiringReport | null;
+}
+
+export interface WiringRow {
+  id: string;
+  status: string;
+  hits?: Array<{ param: string; gain: number }>;
+  losesIfMissing: string;
+}
+
+export interface WiringReport {
+  rows: WiringRow[];
+  dead: string[];
+  vtsModelName?: string;
+  elapsedMs?: number;
+}
+
+/** `overlay.state` */
+export interface OverlayState {
+  url: string | null;
+  streamUp: boolean;
+  config: OverlayConfig;
+}
+
+export interface OverlaySubtitleStyle {
+  scale: number;
+  weight: number;
+  maxLines: number;
+  color: string;
+  strokeColor: string;
+  strokeW: number;
+  plate: number;
+  fontFamily: string;
+}
+
+export interface OverlayConfig {
+  subtitles: boolean;
+  cues: boolean;
+  danmaku: boolean;
+  subtitle: OverlaySubtitleStyle;
+}
+
+/** `clips.state` */
+export interface ClipsItem {
+  clipId: string;
+  word: string;
+  kind: string;
+  durationMs?: number;
+}
+
+export interface ClipsState {
+  vtsConnected: boolean;
+  file: string;
+  groups: Array<{ label: string; items: ClipsItem[] }>;
+}
+
+/**
+ * 声线档案(`tts.setProfile` 收的、`tts.state` 里回的那份)。
+ *
+ * 字段名与模组的 `TtsProfile` 一字不差:面板把整份表单原样交回去,服务端钳制后
+ * 回一份生效值。这里不复制那些上下界——钳制归模组,面板只负责如实读出来。
+ */
+export interface TtsProfile {
+  /** voices/ 下的 wav 文件名;null = 不带参考音频 */
+  refAudio: string | null;
+  /** 参考音频转写;空串 + 有参考音频 = 纯克隆模式 */
+  refText: string;
+  seed: number;
+  cfgValue: number;
+  inferenceTimesteps: number;
+  maxSteps: number;
+  temperature: number;
+}
+
+/** voices/ 里的一条声线:wav 文件 + 同名 .txt 的转写(没有则空) */
+export interface TtsVoiceInfo {
+  file: string;
+  text: string;
+}
+
+/** `tts.state`:server 状态 + 生效档案 + 声线库一次问齐 */
+export interface TtsPanelState extends TtsState {
+  /** server 探得通(合成要它在跑;启停在「挂载」面板) */
+  reachable: boolean;
+  profile: TtsProfile;
+  voices: TtsVoiceInfo[];
+  /** voices/ 的绝对路径,提示人参考音频缓存在哪 */
+  voicesDir: string;
+}
+
+/** `tts.saveVoice` 的回执 */
+export interface SavedVoice {
+  file: string;
+  path: string;
+  /** 转码前的源格式;输入为 WAV 时是 null */
+  converted: string | null;
+}
+
+/** `tts.test` 的回执($binary 之外那条:wav 是 base64) */
+export interface TtsTestResult {
+  ok: boolean;
+  message: string;
+  wav: string | null;
+}
+
+/** `align.state` */
+export interface AlignState {
+  /** 演出流水线里每片都标注(配置项「逐分片时间点标注」) */
+  enabled: boolean;
+  /** 对齐器随 TTS server 加载了 */
+  available: boolean;
+  lastOk: boolean | null;
+}
+
+/** 一个对齐单元:中日文逐字,英文逐词,标点不参与 */
+export interface AlignUnit {
+  text: string;
+  /** 秒,相对音频起点 */
+  start: number;
+  end: number;
+}
+
+/** `align.align` 的回执 */
+export interface AlignRun {
+  units: AlignUnit[];
+  duration: number;
+  verdict: { ok: boolean; reasons: string[]; coverage: number };
+  elapsedMs: number;
+}
+
+/** `log.entries` */
+export interface PerfLogEntry {
+  seq: number;
+  ts: string;
+  area: string;
+  msg: string;
+}
+
+/** `diag.state`:落盘状态与当前报表一起回 */
+export interface DiagState {
+  state: { dir: string | null; autoDumpSec: number; lastDump: string | null };
+  report: DiagReport;
+}
+
+/** 报表只有面板要读的那几支写成类型,其余原样进 JSON 抽屉 */
+export interface DiagReport {
+  window?: { evalHz?: number };
+  inject?: {
+    sentHz?: number;
+    dropPct?: number;
+    droppedBusy?: number;
+    rejectedParams?: string[];
+  };
+  state?: {
+    performer?: {
+      mode?: string;
+      queuedBeats?: number;
+      playing?: boolean;
+      states?: Record<string, number | string | null | undefined>;
+    } | null;
+  };
+  params?: Record<string, { jumps?: DiagJump[] }>;
+}
+
+export interface DiagJump {
+  from: number;
+  to: number;
+  delta: number;
+  dtMs: number;
+  dBy?: Record<string, number>;
+  duck?: [number, number];
+}
+
+// ---------------------------------------------------------------------------
+// 共享 helper
+// ---------------------------------------------------------------------------
+
+/** 错误 → 一句人话。`ConsoleInvokeError` 带的就是服务端的中文措辞。 */
+export function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * 改写一条 `msgline` 的正文与配色。
+ *
+ * `ui.msgline(text, bad)` 只管建节点;面板上那一行消息是活的(每次操作都改),
+ * 所以要有一条改写路径。`bad` 是 `styles.css` 里 `.msgline.bad` 的那个 class,
+ * 与原语建节点时用的是同一个。
+ */
+export function setMsg(el: HTMLElement, text: string, bad = false): void {
+  el.textContent = text;
+  el.classList.toggle('bad', bad);
+}
+
+/**
+ * 带上下界与步长的数字输入。
+ *
+ * `ConsoleInputOpts` 有 `type: 'number'` 但没有 `min` / `max` / `step` / 宽度,
+ * 而这几个面板上的数字框(幅度、字号、行数、录制秒数)全都要。原语返回的是真
+ * `<input>`,所以这里补设原生属性;宽度走本 provider 自己的 class。
+ */
+export function numField(
+  ctx: ConsolePanelContext,
+  opts: {
+    value: number;
+    min: number;
+    max: number;
+    step?: number;
+    /** 追加到 `field` 之后的本 provider class(定宽用) */
+    cls?: string;
+    onChange?: (value: number) => void;
+  },
+): HTMLInputElement {
+  const onChange = opts.onChange;
+  const el = ctx.ui.input({
+    type: 'number',
+    value: String(opts.value),
+    cls: opts.cls ?? 'vt-num',
+    ...(onChange ? { onChange: (v: string) => onChange(Number(v)) } : {}),
+  });
+  el.min = String(opts.min);
+  el.max = String(opts.max);
+  el.step = String(opts.step ?? 1);
+  return el;
+}
+
+/**
+ * 色板输入。`ConsoleInputOpts.type` 的枚举里没有 `color`(它是个跨 provider 少见的
+ * 类型),所以这里拿原语建出节点后改 `type`——这样 `field` 的皮、以及 `onChange`
+ * 那条**带 `signal` 的监听**都还是原语给的,插件不必自己装监听。
+ */
+export function colorField(
+  ctx: ConsolePanelContext,
+  value: string,
+  onChange: (value: string) => void,
+): HTMLInputElement {
+  const el = ctx.ui.input({ value, cls: 'vt-color', onChange });
+  el.type = 'color';
+  return el;
+}
+
+/** 一行灰色小注(导入提示、单元预览这类)。 */
+export function dimLine(ctx: ConsolePanelContext, text = ''): HTMLElement {
+  return ctx.ui.h('div', 'pagedesc vt-dim', text);
+}
+
+// ---------------------------------------------------------------------------
+// 二进制:base64 ⇄ 字节
+// ---------------------------------------------------------------------------
+
+/** 一次 `String.fromCharCode` 的实参上限。整段铺开会爆调用栈(几 MB 的 wav 是常态)。 */
+const B64_CHUNK = 0x8000;
+
+/** 字节 → base64(上传参考音频、把本地文件交给对齐器)。 */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + B64_CHUNK));
+  }
+  return btoa(bin);
+}
+
+/**
+ * base64 → 字节(合成回来的 wav:要播、要存、还要解码画波形)。
+ *
+ * 回的是 `Uint8Array<ArrayBuffer>` 而不是默认的 `ArrayBufferLike`:`Blob` 的
+ * `BlobPart` 不收后者(那里面还含 `SharedArrayBuffer`),而这几段字节的去处
+ * 恰恰全是 Blob。
+ */
+export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// ---------------------------------------------------------------------------
+// 生命周期:ObjectURL 槽位与 `<audio>` 元素
+// ---------------------------------------------------------------------------
+
+/**
+ * **单槽** ObjectURL:一个槽里同时只挂一份 URL,换新的先撤旧的,面板卸载时撤干净。
+ *
+ * 为什么是槽而不是"每建一个就 `ctx.own` 一份":试听/下载是可以按一百次的按钮,
+ * 每次登记一份就是一条只增不减的账本(旧值早就没人引用了,却要留到面板卸载)。
+ * 槽只登记一次,后面每次 `set` 自己顶掉前一份。
+ *
+ * 一个面板可以开多个槽——播放器与下载各用各的:共用一个的话,点一次"保存 wav"
+ * 会把正在播的那份 URL 撤掉,播放当场断。
+ */
+export interface UrlSlot {
+  /** 换一份内容,返回新 URL(上一份当场 revoke)。 */
+  set(blob: Blob): string;
+  /** 提前撤下(不必调;面板卸载时自动撤)。 */
+  clear(): void;
+}
+
+export function urlSlot(ctx: ConsolePanelContext): UrlSlot {
+  let url: string | null = null;
+  const clear = (): void => {
+    if (!url) return;
+    URL.revokeObjectURL(url);
+    url = null;
+  };
+  ctx.own(toDisposable(clear));
+  return {
+    set(blob: Blob): string {
+      clear();
+      url = URL.createObjectURL(blob);
+      return url;
+    },
+    clear,
+  };
+}
+
+/**
+ * 一个随面板收场的 `<audio>`。
+ *
+ * **不登记就是最难发现的那种泄漏**:离开面板后 DOM 被清空,但那个元素还在解码、
+ * 还在出声——用户听得见一个已经不存在的页面在放音。所以卸载时暂停、摘 `src`、
+ * 再 `load()` 一次让它真的松开那份资源(光 `pause()` 不摘 src 的话缓冲还挂着)。
+ */
+export function ownedAudio(ctx: ConsolePanelContext): HTMLAudioElement {
+  const el = ctx.ui.h('audio');
+  el.preload = 'auto';
+  ctx.own(toDisposable(() => {
+    el.pause();
+    el.removeAttribute('src');
+    el.load();
+  }));
+  return el;
+}
+
+/**
+ * 等 `ms` 毫秒。**不用裸 `setTimeout`**:那条计时器不认 `ctx.signal`,面板卸了
+ * 它还在,`await` 之后那段代码会往一棵已经被清空的 DOM 里写。
+ *
+ * `ctx.interval` 登记过、卸载自动停;这里跑一拍就自己撤下。面板卸载时 promise
+ * 落在 `false` 上(而不是永挂),调用方 `await` 之后照常走它的收尾。
+ */
+export function delay(ctx: ConsolePanelContext, ms: number): Promise<boolean> {
+  if (ctx.signal.aborted) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
+    let timer: Disposable | null = null;
+    const stop = (ok: boolean): void => {
+      timer?.dispose();
+      resolve(ok);
+    };
+    ctx.signal.addEventListener('abort', () => stop(false), { once: true });
+    timer = ctx.interval(() => stop(true), ms);
+  });
+}
+
+// ---------------------------------------------------------------------------
+
+const plugin: ConsoleClientPlugin = {
+  /**
+   * 键是**局部** panel id,与服务端 `console().panels[].id` 一一对应
+   * (`src/io-vtuber/module.ts` 的 `VTUBER_PANEL_DECLS`)。
+   *
+   * 声明与插件**同进同退**:这里少一个键,控制台就给一张"插件缺这个面板"的错误卡;
+   * 那边少一条声明,面板就在导航里够不着。八个面板两处必须逐条对上——
+   * `tests/web/io-vtuber-console.test.ts` 拿这两份清单对咬。
+   */
+  panels: {
+    mount: mountPanel,
+    model: modelPanel,
+    overlay: overlayPanel,
+    clips: clipsPanel,
+    tts: ttsPanel,
+    align: alignPanel,
+    log: logPanel,
+    diag: diagPanel,
+  },
+};
+
+export default plugin;

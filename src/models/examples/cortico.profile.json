@@ -1,0 +1,104 @@
+{
+    "id": "VTS-Type-H1",
+    "label": "Type-H1 (Cortico)",
+    "backend": "vts",
+    "vtsModelName": "Type-H1 (Cortico)",
+    "wiring": {
+        "MouthSmile": {
+            "neutral": 0.5,
+            "scale": 0.5,
+            "clamp": [
+                0,
+                1
+            ]
+        },
+        "BrowLeftY": {
+            "neutral": 0.5,
+            "scale": 0.5,
+            "clamp": [
+                0,
+                1
+            ]
+        },
+        "BrowRightY": {
+            "neutral": 0.5,
+            "scale": 0.5,
+            "clamp": [
+                0,
+                1
+            ]
+        },
+        "EyeOpenLeft": {
+            "neutral": 0.5,
+            "scale": 0.5,
+            "clamp": [
+                0,
+                1
+            ]
+        },
+        "EyeOpenRight": {
+            "neutral": 0.5,
+            "scale": 0.5,
+            "clamp": [
+                0,
+                1
+            ]
+        },
+        "EyeLeftX": {
+            "invert": true
+        },
+        "EyeRightX": {
+            "invert": true
+        }
+    },
+    "unsupported": [],
+    "fx": {
+        "fx_surprise": {
+            "file": "EyeOO.exp3.json",
+            "durationMs": 2000
+        },
+        "fx_sweat": {
+            "file": "Sweating.exp3.json",
+            "durationMs": 2000
+        },
+        "fx_idea": {
+            "file": "Idea.exp3.json",
+            "durationMs": 2400
+        },
+        "fx_question": {
+            "file": "Question.exp3.json",
+            "durationMs": 2100
+        },
+        "fx_star": {
+            "file": "Star.exp3.json",
+            "durationMs": 1600
+        },
+        "fx_loading": {
+            "file": "Loading.exp3.json",
+            "durationMs": 2400
+        },
+        "fx_blush": {
+            "file": "Blush.exp3.json",
+            "durationMs": 3000
+        },
+        "fx_anger": {
+            "file": "Angry.exp3.json",
+            "durationMs": 2200
+        },
+        "fx_sigh": {
+            "file": "Sigh.exp3.json",
+            "durationMs": 2600
+        },
+        "fx_glasses": {
+            "file": "Glasses.exp3.json",
+            "durationMs": 2800
+        }
+    },
+    "keepExpressions": [
+        "Yukima.exp3.json",
+        "EyeDark1.exp3.json",
+        "Mic.exp3.json"
+    ],
+    "idleBlinks": false,
+    "caveat": "头部三轴 Smoothing 22/9/22 是原版设置,短促动作略被抹平;要更锐就把 .vtube.json 里 FaceAngleX/Y/Z 的 Smoothing 改成 0。"
+}

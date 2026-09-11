@@ -1,0 +1,149 @@
+/*
+ * VTuber 面板的专有样式。
+ *
+ * 只放 `ctx.ui` 没有对应原语的那几块:挂载行(状态灯 + 名字 + 状态词 + 细节 +
+ * 按钮列)、几个要定宽的数字框、色板输入、overlay 预览窗、以及"这一排允许换行"。
+ * 其余一律用原语(sheet / rowbar / btn / field / pill / chip / table / kv / log /
+ * placeholder),那些 class 归控制台管,这里一个字都不覆盖。
+ *
+ * 两条自律(与 io-qq 那份同源):
+ *
+ * 1. **类名一律 `vt-` 前缀。** 这份样式表跟着 provider 的 bundle 注入到同一个
+ *    文档里,不加前缀就是往全局命名空间里丢东西——别的 provider 撞上了没处说理。
+ *    挂载行与控制台里既有的 `.mountrow` 长得一样,但那是**控制台的** class:
+ *    没有原语把它交出来,借用就是借了一个随时会被改掉的实现细节。
+ * 2. **颜色/字体只用控制台的主题变量。** 写死色值的话,主题一换这块就成了补丁。
+ */
+
+/* ---- 挂载行:一行 = 一条链路 ---- */
+.vt-mountrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.vt-mountrow .vt-mname {
+  width: 6.2em;
+  flex: none;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.vt-mountrow .vt-mstate {
+  font: 12px var(--mono);
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+.vt-mountrow .vt-mstate.on { color: var(--ok); }
+.vt-mountrow .vt-mstate.off { color: var(--danger); }
+.vt-mountrow .vt-mstate.warn { color: var(--warn); }
+
+.vt-mountrow .vt-mdetail {
+  flex: 1;
+  min-width: 0;
+  font: 11.5px var(--mono);
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vt-mountrow .vt-macts {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+/* 状态灯。三态与控制台导航上那颗同一套语义色 */
+.vt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  flex: none;
+}
+
+.vt-dot.on { background: var(--ok); }
+.vt-dot.warn { background: var(--warn); }
+.vt-dot.off { background: var(--danger); }
+
+/* ---- 一行灰色小注(导入提示、单元预览、缓存路径) ---- */
+.vt-dim { opacity: .75; }
+
+/* ---- 藏起来的文件选择框(`ConsoleUi` 没有 filePicker 原语,按钮代点它) ---- */
+.vt-hidden { display: none; }
+
+/* ---- 定宽的数字框 ---- */
+.vt-num { width: 5em; }
+.vt-num.sm { width: 4em; }
+.vt-num.md { width: 6.5em; }
+
+/* ---- 色板输入(原语没有 type=color,宽高交给这里) ---- */
+.vt-color {
+  width: 44px;
+  min-width: 44px;
+  padding: 2px;
+  height: 26px;
+}
+
+/* ---- overlay 预览窗:按需挂上的 iframe ---- */
+.vt-preview {
+  display: none;
+  margin-top: 8px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.vt-preview.on { display: block; }
+
+.vt-previewframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ---- 时间点标注的波形画布。
+       高度由面板按 WAVE_H 写在行内(后备位图要按同一个数按 dpr 放大),
+       这里只管它的排版与手感:占满一行、点得动。 ---- */
+.vt-wave {
+  width: 100%;
+  display: block;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.vt-playbar { margin-top: 6px; }
+
+/* 读数会从 "0.00 / 3.12s" 长到带单元名,定个下限免得后面那行消息左右跳 */
+.vt-time { min-width: 9em; }
+
+/* ---- 一排东西太多时允许换行(动作调参那几排 cue 按钮、字幕样式那两排) ---- */
+.vt-wrap { flex-wrap: wrap; }
+
+@container console-content (max-width: 560px) {
+  .vt-mountrow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 7px 9px;
+    align-items: center;
+    padding: 12px 0;
+  }
+
+  .vt-mountrow .vt-mname { width: auto; }
+
+  .vt-mountrow .vt-mdetail,
+  .vt-mountrow .vt-macts { grid-column: 2 / -1; }
+
+  .vt-mountrow .vt-mdetail {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .vt-mountrow .vt-macts { flex-wrap: wrap; }
+}

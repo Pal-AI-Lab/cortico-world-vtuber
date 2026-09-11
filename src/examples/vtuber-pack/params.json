@@ -1,0 +1,128 @@
+{
+  "FaceAngleX": {
+    "unit": "度,±30",
+    "range": [
+      -30,
+      30
+    ],
+    "suggests": "ParamAngleX(1:1)",
+    "losesIfMissing": "摇头、张望、身体摇摆"
+  },
+  "FaceAngleY": {
+    "unit": "度,±30",
+    "range": [
+      -30,
+      30
+    ],
+    "suggests": "ParamAngleY(1:1)",
+    "losesIfMissing": "点头、垂头、抬下巴、句首韵律"
+  },
+  "FaceAngleZ": {
+    "unit": "度,±30",
+    "range": [
+      -30,
+      30
+    ],
+    "suggests": "ParamAngleZ(1:1)",
+    "losesIfMissing": "歪头(整条 tilt 系)"
+  },
+  "MouthOpen": {
+    "unit": "[0,1]",
+    "range": [
+      0,
+      1
+    ],
+    "suggests": "ParamMouthOpenY(1:1)",
+    "losesIfMissing": "口型同步——嘴不会动"
+  },
+  "MouthSmile": {
+    "unit": "[-1,1],中性 0",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamMouthForm(中性居中)",
+    "losesIfMissing": "全部情绪的嘴形"
+  },
+  "EyeOpenLeft": {
+    "unit": "[-1,1],0=平常睁眼",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamEyeLOpen",
+    "losesIfMissing": "眯眼/瞪眼/眨单眼"
+  },
+  "EyeOpenRight": {
+    "unit": "[-1,1],0=平常睁眼",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamEyeROpen",
+    "losesIfMissing": "眯眼/瞪眼"
+  },
+  "EyeRightX": {
+    "unit": "[-1,1]",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamEyeBallX",
+    "losesIfMissing": "眼球横向——注视全废"
+  },
+  "EyeRightY": {
+    "unit": "[-1,1]",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamEyeBallY",
+    "losesIfMissing": "眼球纵向、翻白眼"
+  },
+  "EyeLeftX": {
+    "unit": "[-1,1]",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "通常与右眼共用一个参数,可不接",
+    "losesIfMissing": "无(双眼共用时本就不接)"
+  },
+  "EyeLeftY": {
+    "unit": "[-1,1]",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "同上",
+    "losesIfMissing": "无"
+  },
+  "BrowLeftY": {
+    "unit": "[-1,1],中性 0",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamBrowLY(中性居中)",
+    "losesIfMissing": "所有眉毛表情;单侧挑眉"
+  },
+  "BrowRightY": {
+    "unit": "[-1,1],中性 0",
+    "range": [
+      -1,
+      1
+    ],
+    "suggests": "ParamBrowRY(中性居中)",
+    "losesIfMissing": "同上"
+  },
+  "CheekPuff": {
+    "unit": "[0,1]",
+    "range": [
+      0,
+      1
+    ],
+    "suggests": "ParamCheekPuff",
+    "losesIfMissing": "鼓脸颊;得意/生气的腮部分量"
+  }
+}

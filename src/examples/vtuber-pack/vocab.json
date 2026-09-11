@@ -1,0 +1,303 @@
+{
+  "entries": [
+    {
+      "word": "点头",
+      "channel": "gesture",
+      "clipId": "nod",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "用力点头",
+      "channel": "gesture",
+      "clipId": "nod",
+      "lifecycle": "pulse",
+      "intensity": 1.35
+    },
+    {
+      "word": "连连点头",
+      "channel": "gesture",
+      "clipId": "nod_rapid",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "摇头",
+      "channel": "gesture",
+      "clipId": "shake",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "拼命摇头",
+      "channel": "gesture",
+      "clipId": "shake",
+      "lifecycle": "pulse",
+      "intensity": 1.3
+    },
+    {
+      "word": "惊吓后仰",
+      "channel": "gesture",
+      "clipId": "scare_back",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "垂头丧气",
+      "channel": "gesture",
+      "clipId": "dejected",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "歪头疑惑",
+      "channel": "gesture",
+      "clipId": "tilt_curious",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "翻白眼",
+      "channel": "gesture",
+      "clipId": "eyeroll",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "得意",
+      "channel": "gesture",
+      "clipId": "smug",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "愣住",
+      "channel": "gesture",
+      "clipId": "freeze",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "瞪大眼睛",
+      "channel": "gesture",
+      "clipId": "eyes_wide",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "看一眼弹幕",
+      "channel": "gesture",
+      "clipId": "glance_danmaku",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "环顾四周",
+      "channel": "gesture",
+      "clipId": "look_around",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "雀跃",
+      "channel": "gesture",
+      "clipId": "excited_bounce",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "鼓脸颊",
+      "channel": "gesture",
+      "clipId": "pout_puff",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "眨单眼",
+      "channel": "gesture",
+      "clipId": "wink",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "歪头",
+      "channel": "pose",
+      "clipId": "tilt_hold",
+      "lifecycle": "state"
+    },
+    {
+      "word": "轻轻摇摆",
+      "channel": "pose",
+      "clipId": "sway",
+      "lifecycle": "state"
+    },
+    {
+      "word": "前倾",
+      "channel": "pose",
+      "clipId": "lean_in",
+      "lifecycle": "state"
+    },
+    {
+      "word": "抬头挺胸",
+      "channel": "pose",
+      "clipId": "chin_up",
+      "lifecycle": "state"
+    },
+    {
+      "word": "微笑",
+      "channel": "emotion",
+      "clipId": "smile",
+      "lifecycle": "state"
+    },
+    {
+      "word": "大笑",
+      "channel": "emotion",
+      "clipId": "laugh",
+      "lifecycle": "state"
+    },
+    {
+      "word": "生气",
+      "channel": "emotion",
+      "clipId": "angry",
+      "lifecycle": "state"
+    },
+    {
+      "word": "可怜",
+      "channel": "emotion",
+      "clipId": "pitiful",
+      "lifecycle": "state"
+    },
+    {
+      "word": "害怕",
+      "channel": "emotion",
+      "clipId": "fearful",
+      "lifecycle": "state"
+    },
+    {
+      "word": "感动",
+      "channel": "emotion",
+      "clipId": "moved",
+      "lifecycle": "state"
+    },
+    {
+      "word": "惊讶",
+      "channel": "emotion",
+      "clipId": "surprised",
+      "lifecycle": "state"
+    },
+    {
+      "word": "困倦",
+      "channel": "emotion",
+      "clipId": "sleepy",
+      "lifecycle": "state"
+    },
+    {
+      "word": "看向屏幕",
+      "channel": "gaze",
+      "clipId": "screen",
+      "lifecycle": "state"
+    },
+    {
+      "word": "看向弹幕",
+      "channel": "gaze",
+      "clipId": "chat",
+      "lifecycle": "state"
+    },
+    {
+      "word": "看向镜头",
+      "channel": "gaze",
+      "clipId": "camera",
+      "lifecycle": "state"
+    },
+    {
+      "word": "看向下面",
+      "channel": "gaze",
+      "clipId": "down",
+      "lifecycle": "state"
+    },
+    {
+      "word": "看向斜上方",
+      "channel": "gaze",
+      "clipId": "up",
+      "lifecycle": "state"
+    },
+    {
+      "word": "惊讶特效",
+      "channel": "fx",
+      "clipId": "fx_surprise",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "流汗特效",
+      "channel": "fx",
+      "clipId": "fx_sweat",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "灯泡特效",
+      "channel": "fx",
+      "clipId": "fx_idea",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "问号特效",
+      "channel": "fx",
+      "clipId": "fx_question",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "星星特效",
+      "channel": "fx",
+      "clipId": "fx_star",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "加载中特效",
+      "channel": "fx",
+      "clipId": "fx_loading",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "脸红特效",
+      "channel": "fx",
+      "clipId": "fx_blush",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "怒气特效",
+      "channel": "fx",
+      "clipId": "fx_anger",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "叹气特效",
+      "channel": "fx",
+      "clipId": "fx_sigh",
+      "lifecycle": "pulse"
+    },
+    {
+      "word": "眼镜特效",
+      "channel": "fx",
+      "clipId": "fx_glasses",
+      "lifecycle": "pulse"
+    }
+  ],
+  "aliases": {
+    "凑近": "前倾",
+    "靠近": "前倾",
+    "认真": "前倾",
+    "晃脑袋": "轻轻摇摆",
+    "委屈": "可怜",
+    "呆住": "愣住",
+    "叹气": "垂头丧气",
+    "笑": "微笑",
+    "开心": "微笑",
+    "哈哈": "大笑",
+    "哈哈大笑": "大笑",
+    "嘿嘿": "得意",
+    "无语": "翻白眼",
+    "疑惑": "歪头疑惑",
+    "思考": "歪头疑惑",
+    "难过": "可怜",
+    "伤心": "可怜",
+    "环视": "环顾四周",
+    "东张西望": "环顾四周",
+    "赌气": "鼓脸颊",
+    "wink": "眨单眼",
+    "抛媚眼": "眨单眼",
+    "兴奋": "雀跃",
+    "困了": "困倦",
+    "点点头": "点头",
+    "摇摇头": "摇头",
+    "开始看向屏幕": "看向屏幕",
+    "开始看向弹幕": "看向弹幕",
+    "开始看向镜头": "看向镜头",
+    "开始看向下面": "看向下面",
+    "开始看向斜上方": "看向斜上方"
+  }
+}

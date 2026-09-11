@@ -1,0 +1,116 @@
+/* 演出 overlay:透明底,专供 OBS browser source 合成与测试台 iframe 嵌入。
+   样式参数来自服务端配置(overlay.config),以 CSS 变量落在 .stage 上。 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+/* ?bg=dim:控制台预览用的暗背景;正式合成不带这个参数,保持透明 */
+body.bg-dim { background: #1c1a17; }
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  font-family: var(--sub-font, 'ZCOOL XiaoWei', 'Microsoft YaHei', sans-serif);
+  --sub-scale: 1;
+  --sub-weight: 400;
+  --sub-color: #fffef8;
+  --sub-stroke-color: #000000;
+  --sub-stroke-w: 1;
+  --sub-plate: 0;
+}
+
+/* ---- 字幕 ---- */
+.bubbles {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  width: 92%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.bubble {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+  max-width: 100%;
+  padding: 0.28em 0.85em;
+  border-radius: 0.6em;
+  background: rgba(10, 10, 12, var(--sub-plate));
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+.bubble.out { opacity: 0; }
+.bubble .body {
+  font-size: calc(clamp(18px, 3.4vmin, 44px) * var(--sub-scale));
+  font-weight: var(--sub-weight);
+  line-height: 1.35;
+  color: var(--sub-color);
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-text-stroke: calc(var(--sub-stroke-w) * 1px) var(--sub-stroke-color);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- 动作标签气泡(左上角) ---- */
+.tag-toasts {
+  position: absolute;
+  top: 2.5%;
+  left: 2%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.tag-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(16, 15, 14, 0.62);
+  color: #f5f2ea;
+  font-size: clamp(12px, 1.7vmin, 18px);
+  opacity: 1;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.tag-toast.out { opacity: 0; transform: translateX(-8px); }
+.tag-toast .dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+.tag-toast.ch-gesture .dot { background: #e7a13d; }
+.tag-toast.ch-pose .dot { background: #7fb069; }
+.tag-toast.ch-emotion .dot { background: #e0607e; }
+.tag-toast.ch-gaze .dot { background: #5aa9d6; }
+.tag-toast.ch-fx .dot { background: #b28dd9; }
+.tag-toast.ch-reset .dot { background: #999; }
+
+/* ---- 弹幕 ---- */
+.danmaku-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.danmaku {
+  position: absolute;
+  white-space: nowrap;
+  font-size: clamp(14px, 2.4vmin, 26px);
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  animation-name: danmaku-fly;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.danmaku.self { color: #ffd97a; }
+@keyframes danmaku-fly {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100vw - 100%)); }
+}
