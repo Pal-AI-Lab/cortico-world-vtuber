@@ -1,4 +1,4 @@
-import type { StreamEvent } from '../protocol/open-responses/index.ts';
+import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
 /**
  * VtuberModule — 直播演出 IO 模组。
  *
@@ -24,8 +24,8 @@ import type {
   ModulePanelDecl,
   OutputTap,
   ToolDef,
-} from '../core/types.ts';
-import { nowIso } from '../core/util.ts';
+} from 'cortico/core/types.ts';
+import { nowIso } from 'cortico/core/util.ts';
 import { FFMPEG_EXE, findFfmpeg, formatLabel, sniffAudioFormat, transcodeToWav } from './audio-convert.ts';
 import { Mixer } from './mixer.ts';
 import { VtsBackend } from './backend.ts';

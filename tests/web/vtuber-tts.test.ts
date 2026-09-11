@@ -10,9 +10,9 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WebApp } from '../../src/web/server.ts';
-import { nullLogger } from '../../src/core/util.ts';
-import { FakeStore } from './fakes.ts';
+import { WebApp } from 'cortico/web/server.ts';
+import { nullLogger } from 'cortico/core/util.ts';
+import { FakeStore } from '../helpers/fake-store.ts';
 
 let app: WebApp;
 let bare: WebApp;

@@ -6,9 +6,37 @@
 import type {
   ConsolePanelContext,
   ConsolePanelPlugin,
-} from '../../web/shared/client-plugin.ts';
-import { icon } from '../../web/client/ui/icons.ts';
+} from 'cortico/web/shared/client-plugin.ts';
 import { errText, setMsg, type ModelState, type WiringReport } from './client.ts';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * 目录选择键上那枚「打开的文件夹」。形状与描边与控制台图标集里的 `folder-open`
+ * 一致,两颗路径选择键并排时不会一眼看出是两套画法。
+ *
+ * 包内自带而不从 `cortico/web/client/ui/icons.ts` 取:浏览器侧只允许 `import type`
+ * 框架,框架的前端代码不随本包发布。
+ */
+function folderOpenIcon(doc: Document): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  for (const [key, value] of Object.entries({
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '1.8',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  })) svg.setAttribute(key, value);
+  svg.classList.add('icon');
+  for (const d of ['M3 6h6l2 2h10', 'M3 6v13h15l3-8H6l-3 8']) {
+    const path = doc.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
 
 const HOW_TEXT: Record<string, string> = {
   configured: '配置指定',
@@ -82,13 +110,13 @@ export const modelPanel: ConsolePanelPlugin = {
     btnPack.className += ' pathpick';
     btnPack.title = '选择演出包目录';
     btnPack.setAttribute('aria-label', btnPack.title);
-    btnPack.appendChild(icon(btnPack.ownerDocument, 'folder-open'));
+    btnPack.appendChild(folderOpenIcon(btnPack.ownerDocument));
     const packBar = ui.rowbar();
     packBar.append(packPath, ui.h('span', 'grow'), btnPack);
     btnLive2d.className += ' pathpick';
     btnLive2d.title = '选择 VTube Studio 的 Live2DModels 目录';
     btnLive2d.setAttribute('aria-label', btnLive2d.title);
-    btnLive2d.appendChild(icon(btnLive2d.ownerDocument, 'folder-open'));
+    btnLive2d.appendChild(folderOpenIcon(btnLive2d.ownerDocument));
     const pickBar = ui.rowbar();
     pickBar.append(ui.pill('档案', 'plain'), sel, msg, ui.h('span', 'grow'), btnCheck);
     const live2dBar = ui.rowbar();

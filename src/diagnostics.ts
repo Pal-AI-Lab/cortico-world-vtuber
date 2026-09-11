@@ -4,7 +4,7 @@
  * 帧分析汇总参数动态范围、分层峰值贡献与最大跳变归因。
  * JSON 导出可选附带指定时长的逐帧原始值。
  */
-import type { LogLevel } from '../core/types.ts';
+import type { LogLevel } from 'cortico/core/types.ts';
 import type { IRFrame } from './mixer.ts';
 
 /** 混合链各层；follow、ambient、override 与 blink 仅覆盖各自控制的参数。 */

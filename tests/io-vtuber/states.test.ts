@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StateMachines, STATE_FADE_IN_MS, type StateCue } from '../../src/io-vtuber/states.ts';
+import { StateMachines, STATE_FADE_IN_MS, type StateCue } from '../../src/states.ts';
 
 function make(neutralGaze: string | null = 'camera') {
   const cues: StateCue[] = [];

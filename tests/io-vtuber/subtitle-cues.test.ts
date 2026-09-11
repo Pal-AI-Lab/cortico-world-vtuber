@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { AlignedUnit } from '../../src/io-vtuber/align.ts';
-import { segmentUnits } from '../../src/io-vtuber/align.ts';
+import type { AlignedUnit } from '../../src/align.ts';
+import { segmentUnits } from '../../src/align.ts';
 import {
   computeSubtitleCues,
   describeSubtitleCues,
   subtitleChunks,
   summarizeSubtitleCues,
-} from '../../src/io-vtuber/subtitle-cues.ts';
+} from '../../src/subtitle-cues.ts';
 
 /** 等间隔铺一版对齐 units:每单元 stepSec 秒,从 startSec 起 */
 function evenUnits(text: string, stepSec: number, startSec = 0): AlignedUnit[] {

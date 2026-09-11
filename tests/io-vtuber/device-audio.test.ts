@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { nullLogger } from '../../src/core/util.ts';
+import { nullLogger } from 'cortico/core/util.ts';
 import {
   DeviceAudioSink,
   mirrorRetarget,
@@ -9,9 +9,9 @@ import {
   secondaryPickQuery,
   shouldMirrorSystem,
   spreadChannels,
-} from '../../src/io-vtuber/device-audio.ts';
-import type { CutPlan } from '../../src/io-vtuber/interrupt-fade.ts';
-import { pcm16ToWav, type TtsPiece, Envelope } from '../../src/io-vtuber/tts.ts';
+} from '../../src/device-audio.ts';
+import type { CutPlan } from '../../src/interrupt-fade.ts';
+import { pcm16ToWav, type TtsPiece, Envelope } from '../../src/tts.ts';
 
 const SR = 16000;
 

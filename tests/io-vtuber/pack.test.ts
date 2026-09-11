@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { driftNoise, sampleKeys, type Key } from '../../src/io-vtuber/clips.ts';
-import { EXAMPLE_PACK_DIR, loadPack, parsePack, vocabTableRows } from '../../src/io-vtuber/pack.ts';
+import { driftNoise, sampleKeys, type Key } from '../../src/clips.ts';
+import { EXAMPLE_PACK_DIR, loadPack, parsePack, vocabTableRows } from '../../src/pack.ts';
 
 const example = loadPack(EXAMPLE_PACK_DIR);
 

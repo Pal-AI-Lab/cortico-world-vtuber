@@ -24,9 +24,10 @@ import type {
   ModuleConsoleDecl,
   OutputTap,
   ToolDef,
-} from '../core/types.ts';
-import { nowIso } from '../core/util.ts';
-import { emitLogNote } from '../core/ipcLogger.ts';
+} from 'cortico/core/types.ts';
+import { nowIso } from 'cortico/core/util.ts';
+import { emitLogNote } from 'cortico/core/ipcLogger.ts';
+import { childExecArgv } from 'cortico/plugins/runtime.ts';
 import { loadProfiles, profileChoices } from './models/index.ts';
 import { EXAMPLE_PACK_DIR, loadPack, vocabTableRows, type PerformancePack } from './pack.ts';
 import {
@@ -528,8 +529,9 @@ export class VtuberModuleProxy implements IOModule {
 
   private async spawn(): Promise<void> {
     const child = fork(CHILD_ENTRY, [], {
-      // 父进程经 tsx 跑 TS 源,子进程同样接上 tsx 的 ESM 钩子
-      execArgv: ['--import', 'tsx'],
+      // tsx 的 ESM 钩子(跑 TS 源)加上框架的 `cortico/*` 解析钩子:child.ts 那边
+      // 同样 import `cortico/core/ipcLogger.ts`,少了后者子进程起不来。
+      execArgv: childExecArgv(),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     this.child = child;

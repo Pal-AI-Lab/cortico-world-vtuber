@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { PerformStream } from '../../src/io-vtuber/perform-stream.ts';
-import { nullLogger } from '../../src/core/util.ts';
+import { PerformStream } from '../../src/perform-stream.ts';
+import { nullLogger } from 'cortico/core/util.ts';
 
 function rejected(url: string, origin: string): Promise<number> {
   return new Promise((resolve, reject) => {

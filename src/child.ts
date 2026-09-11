@@ -5,8 +5,8 @@
  * hreq/hrep。事件库仅重放播出延迟计算所需的 cursor、ts 与 source；range/grep
  * 返回空结果。
  */
-import { makeIpcLogger } from '../core/ipcLogger.ts';
-import { withAnchors } from '../core/logContext.ts';
+import { makeIpcLogger } from 'cortico/core/ipcLogger.ts';
+import { withAnchors } from 'cortico/core/logContext.ts';
 import {
   VTUBER_MODULE_DEFAULTS,
   VtuberModule,
@@ -30,7 +30,7 @@ import type {
   Logger,
   OutputTap,
   ToolDef,
-} from '../core/types.ts';
+} from 'cortico/core/types.ts';
 
 function send(msg: ChildToMain): void {
   if (!process.connected || !process.send) return;

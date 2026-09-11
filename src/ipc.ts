@@ -1,4 +1,4 @@
-import type { StreamEvent } from '../protocol/open-responses/index.ts';
+import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
 /**
  * 演出引擎子进程的 IPC 协议。
  *
@@ -12,9 +12,9 @@ import type { StreamEvent } from '../protocol/open-responses/index.ts';
  * 消息按 Node IPC 的到达序处理:tap 增量先于同一调用的工具请求发出,子进程里
  * 的处理顺序因此与进程内一致。
  */
-import type { LogNote } from '../core/ipcLogger.ts';
-import type { EventEnvelope, LLMUsage, PushOptions } from '../core/types.ts';
-import type { ModuleConsoleDecl } from '../core/types.ts';
+import type { LogNote } from 'cortico/core/ipcLogger.ts';
+import type { EventEnvelope, LLMUsage, PushOptions } from 'cortico/core/types.ts';
+import type { ModuleConsoleDecl } from 'cortico/core/types.ts';
 import type { OverlayConfig, TtsProfile, VtuberDecaySec } from './module.ts';
 
 /**
@@ -105,7 +105,7 @@ export type EngineCast =
 /** 子 → 主的无回执通知。 */
 export type EngineNote =
   | LogNote
-  | { kind: 'usage'; usage: LLMUsage; opts?: Parameters<import('../core/types.ts').IOModuleHost['reportUsage']>[1] }
+  | { kind: 'usage'; usage: LLMUsage; opts?: Parameters<import('cortico/core/types.ts').IOModuleHost['reportUsage']>[1] }
   | { kind: 'status'; line: string | null; live: boolean; decl: Pick<ModuleConsoleDecl, 'lamps' | 'badges' | 'links'> }
   | { kind: 'tts-profile'; profile: TtsProfile }
   | { kind: 'overlay-config'; config: OverlayConfig }

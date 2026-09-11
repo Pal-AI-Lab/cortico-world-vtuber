@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { IOModuleDefinition } from '../modules.ts';
+import type { IOModuleDefinition } from 'cortico/modules.ts';
 import {
   OVERLAY_CONFIG_DEFAULTS,
   TTS_PROFILE_DEFAULTS,
@@ -10,6 +10,7 @@ import {
   type TtsProfile,
 } from './module.ts';
 import { VtuberModuleProxy } from './proxy.ts';
+import { playbackConfigOptions } from './device-audio.ts';
 
 /** config.json 的 `io.vtuber` 节。 */
 export interface VtuberConfigSection {
@@ -60,6 +61,8 @@ export const VTUBER: IOModuleDefinition<VtuberConfigSection> = {
     ttsProfile: { ...TTS_PROFILE_DEFAULTS },
     overlay: structuredClone(OVERLAY_CONFIG_DEFAULTS),
   }),
+  // 播放设备下拉的选项。枚举本机声卡要 audify,那是本包的依赖;模组自报,宿主与 bot 都不替它答。
+  configOptions: (kind) => playbackConfigOptions(kind),
   create: (ctx) => {
     const { cfg } = ctx;
     // 演出包三层,与环境提示词同一套规则:部署覆盖 > 人格包自带 > 模组范例(packDir 为空时)。

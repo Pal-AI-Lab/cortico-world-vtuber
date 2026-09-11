@@ -91,7 +91,7 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 
 `vtuber_act` 的参数流经**输出旁路**流式捕获:识别到调用头即逐字符
 送 L2,解析、TTS 分片、演出与 LLM 生成全程流水线化。装配层把 `module.outputTap()`
-填进主 session 声明(见 `bots/cortiv/index.ts`)。不接 tap 时工具 handler
+填进主 session 声明(在 bot 那一侧接线)。不接 tap 时工具 handler
 整段演出;台词路径等价,但积压闸门的口径不同——流式路径只在轮首裁决一次,
 非流式路径每次调用都按轮首裁决。
 
@@ -128,8 +128,8 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 
 (另有 `ttsProfile` 与 `overlay` 两段由控制台面板写回,不必手填。)
 
-演出包目录是配置项 `io.vtuber.packDir`(控制台「模型档案」面板可选目录,重启生效)。bot 的
-层 2 默认指向自己的包(CortiV 是 `bots/cortiv/vtuber-pack/`),留空用 `examples/vtuber-pack/`。
+演出包目录是配置项 `io.vtuber.packDir`(控制台「模型档案」面板可选目录,重启生效)。留空时
+先找部署目录下的 `vtuber-pack/`、再找 bot 包目录下的 `vtuber-pack/`,都没有就用 `examples/vtuber-pack/`。
 
 - 密钥:`.env` 中 `VTS_AUTH_TOKEN`(首次连接在 VTS 弹窗允许后写入)。
 - **端口注意**:VTS Public API 默认占 8001,VoxCPM2 server 用 8010,演出流服务 7792。
@@ -160,8 +160,8 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 ## 演出包
 
 参数集、演出词表与参数曲线是 bot 拥有的数据,不是模组代码:一个目录里三份 JSON,
-`params.json`、`vocab.json` 与 `clips.json`。CortiV 的在 `bots/cortiv/vtuber-pack/`;`examples/vtuber-pack/` 是模组自带的
-范例包,也是不传 `packDir` 时的默认包。加载与校验在 [`pack.ts`](pack.ts)(`loadPack` →
+`params.json`、`vocab.json` 与 `clips.json`,放在 bot 包目录下的 `vtuber-pack/`;`examples/vtuber-pack/` 是模组自带的
+范例包,也是 bot 没带包时的默认包。加载与校验在 [`pack.ts`](pack.ts)(`loadPack` →
 `PerformancePack`:`params` / `entries` / `aliases` / `pulse` / `sustain` / `gaze` / `fxIds`,
 `resolveTag` 做别名归一与查词,`lint` 报非致命警告)。主进程代理与演出子进程各自读同一个包:
 代理只用它渲染环境提示词(`{{vtuber.vocab}}` 洞由 `vocabTableRows` 按通道生成表格行),

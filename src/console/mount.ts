@@ -6,7 +6,7 @@
 import type {
   ConsolePanelContext,
   ConsolePanelPlugin,
-} from '../../web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-plugin.ts';
 import { errText, setMsg, type MountState, type TtsState, type VtsState } from './client.ts';
 
 /** 等 TTS 权重加载的轮询:每 2 秒问一次,最多 90 拍(3 分钟) */

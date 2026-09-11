@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import type { IOModuleHost } from '../../src/core/types.ts';
-import type { EngineRequest } from '../../src/io-vtuber/ipc.ts';
-import { VtuberModuleProxy } from '../../src/io-vtuber/proxy.ts';
+import type { IOModuleHost } from 'cortico/core/types.ts';
+import type { EngineRequest } from '../../src/ipc.ts';
+import { VtuberModuleProxy } from '../../src/proxy.ts';
 
 afterEach(() => vi.useRealTimers());
 

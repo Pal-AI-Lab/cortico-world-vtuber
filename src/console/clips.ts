@@ -8,7 +8,7 @@
 import type {
   ConsolePanelContext,
   ConsolePanelPlugin,
-} from '../../web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-plugin.ts';
 import { errText, numField, setMsg, type ClipsItem, type ClipsState } from './client.ts';
 
 export const clipsPanel: ConsolePanelPlugin = {

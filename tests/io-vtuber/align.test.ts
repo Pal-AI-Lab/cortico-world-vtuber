@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AlignerClient, countPauses, judgeAlignment, segmentUnits, type AlignedUnit } from '../../src/io-vtuber/align.ts';
+import { AlignerClient, countPauses, judgeAlignment, segmentUnits, type AlignedUnit } from '../../src/align.ts';
 import { makeWav } from './helpers.ts';
 
 describe('segmentUnits', () => {

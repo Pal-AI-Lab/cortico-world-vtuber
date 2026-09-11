@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { EventEnvelope, EventStoreReader } from '../../src/core/types.ts';
-import { broadcastFloorMs } from '../../src/io-vtuber/module.ts';
+import type { EventEnvelope, EventStoreReader } from 'cortico/core/types.ts';
+import { broadcastFloorMs } from '../../src/module.ts';
 
 /** cursor 从 1 起的假事件库 */
 function storeOf(events: Array<{ source: string; tsOffsetMs: number }>, now: number): EventStoreReader {

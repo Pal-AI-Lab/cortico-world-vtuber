@@ -10,11 +10,11 @@
  * 只是 `replaceChildren()` 清空 root,它不知道里面有个还在订阅的 iframe。
  */
 
-import {
-  toDisposable,
-  type ConsolePanelContext,
-  type ConsolePanelPlugin,
-} from '../../web/shared/client-plugin.ts';
+import type {
+  ConsolePanelContext,
+  ConsolePanelPlugin,
+} from 'cortico/web/shared/client-plugin.ts';
+import { toDisposable } from './disposable.ts';
 import {
   colorField,
   errText,

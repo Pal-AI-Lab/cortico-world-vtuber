@@ -5,8 +5,8 @@ import {
   stripUnknownTags,
   type Beat,
   type SpeechPiece,
-} from '../../src/io-vtuber/parser.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+} from '../../src/parser.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
 

@@ -5,12 +5,12 @@
  * 波形、PCM 和采样率归 provider；卡片、按钮、消息行与 kv 表使用通用 UI 原语。
  */
 
-import { toDisposable } from '../../web/shared/client-plugin.ts';
 import type {
   ConsolePanelContext,
   ConsolePanelPlugin,
   Disposable,
-} from '../../web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-plugin.ts';
+import { toDisposable } from './disposable.ts';
 import {
   base64ToBytes,
   bytesToBase64,

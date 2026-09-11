@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SILENCE_HOP_MS, SILENCE_MIN_MS, SilenceScanner, scanSilence } from '../../src/io-vtuber/silence-scan.ts';
+import { SILENCE_HOP_MS, SILENCE_MIN_MS, SilenceScanner, scanSilence } from '../../src/silence-scan.ts';
 
 const SR = 16000;
 /** 一个 hop 的样本数(20ms @16k = 320);所有片段都按整 hop 造,免得边界 hop 混进半段语音 */

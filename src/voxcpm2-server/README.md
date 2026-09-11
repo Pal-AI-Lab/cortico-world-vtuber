@@ -42,7 +42,7 @@ voxcpm2-server/
 ## 启动
 
 ```powershell
-cd src/io-vtuber/voxcpm2-server
+cd src/voxcpm2-server
 powershell -File .\start.ps1
 # → http://127.0.0.1:8001
 ```

@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-import type { Logger } from '../core/types.ts';
+import type { Logger } from 'cortico/core/types.ts';
 
 export type TtsServerPhase = 'stopped' | 'starting' | 'running' | 'error';
 

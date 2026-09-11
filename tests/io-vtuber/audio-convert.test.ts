@@ -8,8 +8,8 @@ import {
   formatLabel,
   sniffAudioFormat,
   transcodeToWav,
-} from '../../src/io-vtuber/audio-convert.ts';
-import { decodeWav } from '../../src/io-vtuber/tts.ts';
+} from '../../src/audio-convert.ts';
+import { decodeWav } from '../../src/tts.ts';
 import { encodeAudio, makeWav } from './helpers.ts';
 
 /** 满足格式检测最小长度的 12 字节文件头。 */

@@ -1,33 +1,21 @@
 /**
  * 模组模板占位符、控制台变量声明与运行时取值保持一致。
+ *
+ * 本包只有演出模组一件;框架仓库里那份同名测试覆盖框架自带的模组,以及 bot 目录下
+ * 的 ENV_PROMPT.md 覆盖模板只用所属模组声明的占位符这一条。
  */
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { envPromptDocOf, renderModuleEnvPrompt } from '../src/core/prefix.ts';
-import { templateVarNames, unknownVarNames } from '../src/core/template.ts';
-import type { IOModule } from '../src/core/types.ts';
-import { BilibiliLiveModule } from '../src/io-bilibili/module.ts';
-import { ConsoleFixtureModule } from '../src/io-console-fixture/module.ts';
-import { MinecraftModule, MINECRAFT_MODULE_DEFAULTS, type MinecraftConfigSection } from '../src/io-minecraft/module.ts';
-import { QQModule } from '../src/io-qq/module.ts';
-import { TerminalModule } from '../src/io-terminal/module.ts';
-import { VtuberModuleProxy } from '../src/io-vtuber/proxy.ts';
-import { WebSearchModule } from '../src/io-websearch/module.ts';
-
-const mcCfg = structuredClone({ ...MINECRAFT_MODULE_DEFAULTS, enabled: true }) as MinecraftConfigSection;
+import { envPromptDocOf, renderModuleEnvPrompt } from 'cortico/core/prefix.ts';
+import { templateVarNames } from 'cortico/core/template.ts';
+import type { IOModule } from 'cortico/core/types.ts';
+import { VtuberModuleProxy } from '../src/proxy.ts';
 
 /** 只构造模组，不启动外部连接。 */
 const MODULES: Array<() => IOModule> = [
-  () => new BilibiliLiveModule({ roomId: 0 }),
-  () => new ConsoleFixtureModule(),
-  () => new MinecraftModule({ cfg: mcCfg }),
-  () => new QQModule({ wsUrl: 'ws://127.0.0.1:1', groups: [], privates: [], token: '' }),
-  () => new TerminalModule(),
   () => new VtuberModuleProxy(),
-  () => new WebSearchModule({ apiKey: 'k' }),
 ];
 
 describe('环境提示词模板契约', () => {
@@ -78,23 +66,6 @@ describe('环境提示词模板契约', () => {
       expect(out.sourceKey).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('bot 侧环境提示词覆盖文件', () => {
-  it('随源码发布的覆盖模板只使用所属模组声明的占位符', () => {
-    const root = resolve(import.meta.dirname, '..');
-    const paths = execFileSync('git', ['ls-files', '-z', '--', 'bots/*/io/*/ENV_PROMPT.md'], {
-      cwd: root, encoding: 'utf8',
-    }).split('\0').filter(Boolean);
-    const modules = new Map(MODULES.map((make) => { const mod = make(); return [mod.id, mod]; }));
-    for (const path of paths) {
-      const id = path.split('/')[3];
-      const mod = modules.get(id);
-      expect(mod, path).toBeDefined();
-      const declared = (envPromptDocOf(mod!)!.vars ?? []).map((v) => v.name);
-      expect(unknownVarNames(readFileSync(join(root, path), 'utf8'), declared), path).toEqual([]);
     }
   });
 });

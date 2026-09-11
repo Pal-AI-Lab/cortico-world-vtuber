@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nullLogger } from '../../src/core/util.ts';
-import type { GestureCue, IRFrame, Mixer } from '../../src/io-vtuber/mixer.ts';
-import { Performer, type AudioSink } from '../../src/io-vtuber/orchestrator.ts';
-import type { StateCue } from '../../src/io-vtuber/states.ts';
-import { Envelope, type TtsPiece } from '../../src/io-vtuber/tts.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+import { nullLogger } from 'cortico/core/util.ts';
+import type { GestureCue, IRFrame, Mixer } from '../../src/mixer.ts';
+import { Performer, type AudioSink } from '../../src/orchestrator.ts';
+import type { StateCue } from '../../src/states.ts';
+import { Envelope, type TtsPiece } from '../../src/tts.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
 

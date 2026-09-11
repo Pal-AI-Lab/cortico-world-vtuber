@@ -7,7 +7,7 @@
  * 设备不可用时仍推进静音时间线,保持演出时序。
  */
 import { createRequire } from 'node:module';
-import type { Logger } from '../core/types.ts';
+import type { Logger } from 'cortico/core/types.ts';
 import type { CutPlan } from './interrupt-fade.ts';
 import type { AudioSink, AudioStreamSession } from './orchestrator.ts';
 import type { TraceOpts } from './diagnostics.ts';

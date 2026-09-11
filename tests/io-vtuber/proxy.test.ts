@@ -1,13 +1,13 @@
-import { legacyTap } from '../core/fixture-protocol.ts';
+import { legacyTap } from '../helpers/fixture-stream.ts';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { EventEnvelope, IOModuleHost, PushOptions } from '../../src/core/types.ts';
+import type { EventEnvelope, IOModuleHost, PushOptions } from 'cortico/core/types.ts';
 import { PassThrough } from 'node:stream';
-import { HANDOFF_NOTE } from '../../src/io-vtuber/module.ts';
-import { attachStdio, VtuberModuleProxy } from '../../src/io-vtuber/proxy.ts';
+import { HANDOFF_NOTE } from '../../src/module.ts';
+import { attachStdio, VtuberModuleProxy } from '../../src/proxy.ts';
 import { makeWav, recordingLogger, type LogLine } from './helpers.ts';
 
 class FakeHost implements IOModuleHost {

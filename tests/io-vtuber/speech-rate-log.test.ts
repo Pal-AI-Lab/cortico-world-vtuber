@@ -2,14 +2,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { PauseCounts, PausePriors } from '../../src/io-vtuber/align.ts';
+import type { PauseCounts, PausePriors } from '../../src/align.ts';
 import {
   netUnitMsQuantile,
   SpeechRateLog,
   SPEECH_RATE_MIN_SAMPLES,
   SPEECH_RATE_QUANTILE,
   type SpeechRateSample,
-} from '../../src/io-vtuber/speech-rate-log.ts';
+} from '../../src/speech-rate-log.ts';
 
 const dirs: string[] = [];
 

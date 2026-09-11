@@ -17,7 +17,7 @@ import { createServer, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { Logger } from '../core/types.ts';
+import type { Logger } from 'cortico/core/types.ts';
 
 /** overlay 页静态资产;请求时现读,改页面刷新即见 */
 const OVERLAY_DIR = fileURLToPath(new URL('./overlay/', import.meta.url));

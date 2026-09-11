@@ -1,0 +1,28 @@
+{
+  // 一份配置同时 check Node 侧(模组、子进程、TTS/VTS 客户端)与浏览器侧
+  // (`src/console/**` 的面板插件),所以 lib 里 DOM 与 ES2022 都在,types 只留 node。
+  // 框架仓库把两侧拆成两份配置,是因为那边有大量只碰 Node 的代码需要 DOM 全局
+  // 缺席才能发现误用;本包的 Node 侧代码不长,不值得为此维护第二份。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    // 开发期把 `cortico/*` 指到同级的框架 checkout。装进宿主运行时不靠它:
+    // 那时解析由框架的 `src/plugins/runtime.ts` 注册的模块钩子完成。
+    "paths": {
+      "cortico/*": ["../BOT/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

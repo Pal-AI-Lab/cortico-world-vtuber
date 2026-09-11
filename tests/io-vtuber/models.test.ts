@@ -14,8 +14,8 @@ import {
   resolveProfile,
   toWire,
   type ModelProfile,
-} from '../../src/io-vtuber/models/index.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+} from '../../src/models/index.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 import { PROFILE_CTX, fixtureProfileJson, writeProfileDir } from './helpers.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);

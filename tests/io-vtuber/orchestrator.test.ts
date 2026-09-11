@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { nullLogger } from '../../src/core/util.ts';
-import { segmentUnits, type AlignedUnit } from '../../src/io-vtuber/align.ts';
-import type { GestureCue, IRFrame, Mixer } from '../../src/io-vtuber/mixer.ts';
+import { nullLogger } from 'cortico/core/util.ts';
+import { segmentUnits, type AlignedUnit } from '../../src/align.ts';
+import type { GestureCue, IRFrame, Mixer } from '../../src/mixer.ts';
 import {
   BUDGET_MS_PER_UNIT,
   describeSpeechRate,
@@ -12,12 +12,12 @@ import {
   type AudioSink,
   type PerformerTts,
   type SpeechRateHint,
-} from '../../src/io-vtuber/orchestrator.ts';
-import { SILENCE_MIN_MS } from '../../src/io-vtuber/silence-scan.ts';
-import type { SubtitleCue } from '../../src/io-vtuber/subtitle-cues.ts';
-import type { StateCue } from '../../src/io-vtuber/states.ts';
-import { Envelope, StreamingEnvelope, type TtsPiece } from '../../src/io-vtuber/tts.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+} from '../../src/orchestrator.ts';
+import { SILENCE_MIN_MS } from '../../src/silence-scan.ts';
+import type { SubtitleCue } from '../../src/subtitle-cues.ts';
+import type { StateCue } from '../../src/states.ts';
+import { Envelope, StreamingEnvelope, type TtsPiece } from '../../src/tts.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
 

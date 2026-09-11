@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planCut, pcm16ToFloat } from '../../src/io-vtuber/interrupt-fade.ts';
+import { planCut, pcm16ToFloat } from '../../src/interrupt-fade.ts';
 
 const SR = 16000;
 

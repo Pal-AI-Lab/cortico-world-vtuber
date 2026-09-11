@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Mixer } from '../../src/io-vtuber/mixer.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+import { Mixer } from '../../src/mixer.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
 

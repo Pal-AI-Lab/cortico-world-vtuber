@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { VtsBackend } from '../../src/io-vtuber/backend.ts';
+import { VtsBackend } from '../../src/backend.ts';
 import {
   DEFAULT_PROFILE,
   type ModelProfile,
   type ParamWiring,
-} from '../../src/io-vtuber/models/index.ts';
-import type { VtsClient } from '../../src/io-vtuber/vts-client.ts';
+} from '../../src/models/index.ts';
+import type { VtsClient } from '../../src/vts-client.ts';
 
 /** 只想改一两条接线时的临时档案 */
 function profileOf(wiring: Record<string, ParamWiring>): ModelProfile {

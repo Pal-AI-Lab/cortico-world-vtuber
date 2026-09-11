@@ -1,0 +1,3 @@
+allowBuilds:
+  audify: true
+  esbuild: true

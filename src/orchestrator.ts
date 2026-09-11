@@ -4,7 +4,7 @@
  *
  * 语义与时间止步于此:向 L3 只发 cue,不碰任何参数值。
  */
-import type { Logger } from '../core/types.ts';
+import type { Logger } from 'cortico/core/types.ts';
 import { countPauses, pauseMs, segmentUnits, type AlignedUnit, type PausePriors } from './align.ts';
 import type { TraceOpts } from './diagnostics.ts';
 import { planCut, pcm16ToFloat, type CutClass, type CutPlan } from './interrupt-fade.ts';

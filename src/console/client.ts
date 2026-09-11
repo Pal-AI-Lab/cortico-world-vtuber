@@ -5,7 +5,8 @@
  * 这个文件只做两件事:**装配**(把面板接到局部 id 上)与**共享 helper**
  * (类型、错误措辞、几个输入与资源生命周期包装)。面板本体各在自己的文件里。
  *
- * 与外界的依赖只有一条:`client-plugin.ts` 里的**类型**与 `toDisposable`。没有
+ * 与外界的依赖只有一条:`cortico/web/shared/client-plugin.ts` 里的**类型**——浏览器侧
+ * 只 `import type`,运行时的值(`toDisposable`、图标)在包内自带。没有
  * import 控制台内部模块,没有 `fetch`,没有 `document.body`,没有 `window.__*`——
  * 数据面一律走 `ctx.invoke` / `ctx.invokeBinary`,DOM 一律用 `ctx.ui` 的原语,
  * 定时器一律走 `ctx.interval`,RAF 走 `ctx.frame`,ObjectURL / AudioContext /
@@ -16,12 +17,12 @@
  * 前缀避开控制台的通用 class,颜色取自控制台的主题变量,所以浅深色两套皮都跟着走。
  */
 
-import { toDisposable } from '../../web/shared/client-plugin.ts';
 import type {
   ConsoleClientPlugin,
   ConsolePanelContext,
   Disposable,
-} from '../../web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-plugin.ts';
+import { toDisposable } from './disposable.ts';
 import './style.css';
 import { mountPanel } from './mount.ts';
 import { modelPanel } from './model.ts';
@@ -449,7 +450,7 @@ export function delay(ctx: ConsolePanelContext, ms: number): Promise<boolean> {
 const plugin: ConsoleClientPlugin = {
   /**
    * 键是**局部** panel id,与服务端 `console().panels[].id` 一一对应
-   * (`src/io-vtuber/module.ts` 的 `VTUBER_PANEL_DECLS`)。
+   * (`src/module.ts` 的 `VTUBER_PANEL_DECLS`)。
    *
    * 声明与插件**同进同退**:这里少一个键,控制台就给一张"插件缺这个面板"的错误卡;
    * 那边少一条声明,面板就在导航里够不着。八个面板两处必须逐条对上——

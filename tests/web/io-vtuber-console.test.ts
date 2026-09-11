@@ -7,11 +7,11 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderTemplate, templateVarNames } from '../../src/core/template.ts';
-import { VTUBER_PANEL_DECLS } from '../../src/io-vtuber/module.ts';
-import { VtuberModuleProxy } from '../../src/io-vtuber/proxy.ts';
-import { ioPageContribution } from '../../src/bot.ts';
-import type { ModulePanelDecl } from '../../src/core/types.ts';
+import { renderTemplate, templateVarNames } from 'cortico/core/template.ts';
+import { VTUBER_PANEL_DECLS } from '../../src/module.ts';
+import { VtuberModuleProxy } from '../../src/proxy.ts';
+import { ioPageContribution } from 'cortico/bot.ts';
+import type { ModulePanelDecl } from 'cortico/core/types.ts';
 import { fixtureProfileJson, writeProfileDir } from '../io-vtuber/helpers.ts';
 
 /**
@@ -19,8 +19,8 @@ import { fixtureProfileJson, writeProfileDir } from '../io-vtuber/helpers.ts';
  * specifier 存进变量,免得根 tsconfig 把它拉进 Node 那份检查——
  * 与 io-qq-console.test.ts 同一个理由。
  */
-const VT_PLUGIN_ENTRY = '../../src/io-vtuber/console/client.ts';
-const CONSOLE_DIR = '../../src/io-vtuber/console';
+const VT_PLUGIN_ENTRY = '../../src/console/client.ts';
+const CONSOLE_DIR = '../../src/console';
 
 const PANEL_IDS = ['mount', 'model', 'overlay', 'clips', 'tts', 'align', 'log', 'diag'];
 

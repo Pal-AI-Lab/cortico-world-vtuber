@@ -7,7 +7,7 @@ import type {
   ConsoleLogTone,
   ConsolePanelContext,
   ConsolePanelPlugin,
-} from '../../web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-plugin.ts';
 import { errText, type PerfLogEntry } from './client.ts';
 
 const POLL_MS = 2000;

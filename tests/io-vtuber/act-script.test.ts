@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ExternalActScriptStreamNormalizer,
   normalizeExternalActScript,
-} from '../../src/io-vtuber/act-script.ts';
+} from '../../src/act-script.ts';
 
 describe('normalizeExternalActScript', () => {
   it('keeps ordinary scripts and performance voice tags byte-for-byte', () => {

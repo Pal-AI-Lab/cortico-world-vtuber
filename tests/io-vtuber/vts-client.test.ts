@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { VtsClient } from '../../src/io-vtuber/vts-client.ts';
-import { VtsBackend } from '../../src/io-vtuber/backend.ts';
+import { VtsClient } from '../../src/vts-client.ts';
+import { VtsBackend } from '../../src/backend.ts';
 
 function authOk(ws: WebSocket, msg: { requestID: string; messageType: string }): void {
   if (msg.messageType === 'AuthenticationTokenRequest') {

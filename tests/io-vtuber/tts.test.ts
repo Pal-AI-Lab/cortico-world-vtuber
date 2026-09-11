@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeWav, extractEnvelope, pcm16ToWav, StreamingEnvelope, TtsClient } from '../../src/io-vtuber/tts.ts';
+import { decodeWav, extractEnvelope, pcm16ToWav, StreamingEnvelope, TtsClient } from '../../src/tts.ts';
 import { makeWav } from './helpers.ts';
 
 describe('decodeWav / extractEnvelope', () => {

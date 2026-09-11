@@ -3,8 +3,8 @@ import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { nullLogger } from '../../src/core/util.ts';
-import { TtsServerManager } from '../../src/io-vtuber/tts-server.ts';
+import { nullLogger } from 'cortico/core/util.ts';
+import { TtsServerManager } from '../../src/tts-server.ts';
 import { recordingLogger, type LogLine } from './helpers.ts';
 
 /** 置位时让 spawn 学 Windows 应用控制拦截:同步抛 errno=UNKNOWN;其余时候走真 spawn */

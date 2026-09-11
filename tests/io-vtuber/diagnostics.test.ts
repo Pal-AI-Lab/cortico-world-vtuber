@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { PerfDiagnostics } from '../../src/io-vtuber/diagnostics.ts';
-import { Mixer } from '../../src/io-vtuber/mixer.ts';
-import type { IRFrame } from '../../src/io-vtuber/mixer.ts';
-import { EXAMPLE_PACK_DIR, loadPack } from '../../src/io-vtuber/pack.ts';
+import { PerfDiagnostics } from '../../src/diagnostics.ts';
+import { Mixer } from '../../src/mixer.ts';
+import type { IRFrame } from '../../src/mixer.ts';
+import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
 

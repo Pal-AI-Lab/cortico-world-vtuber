@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, get as httpGet, type IncomingHttpHeaders, type Server } from 'node:http';
 import WebSocket from 'ws';
-import { nullLogger } from '../../src/core/util.ts';
-import { PerformStream } from '../../src/io-vtuber/perform-stream.ts';
+import { nullLogger } from 'cortico/core/util.ts';
+import { PerformStream } from '../../src/perform-stream.ts';
 
 function waitFor(cond: () => boolean, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {

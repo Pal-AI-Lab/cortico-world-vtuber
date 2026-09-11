@@ -1,0 +1,49 @@
+{
+  "name": "cortico-io-vtuber",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cortico IO module: Live2D VTuber performance — VTube Studio wiring, streaming TTS, forced alignment, subtitle overlay",
+  "license": "MIT",
+  "keywords": [
+    "cortico-module",
+    "cortico",
+    "vtuber",
+    "live2d",
+    "vtube-studio",
+    "tts"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.5.0",
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "io",
+    "api": 1,
+    "consoleClient": "dist/console.js",
+    "consoleStyle": "dist/console.css"
+  },
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-console.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "audify": "^1.10.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

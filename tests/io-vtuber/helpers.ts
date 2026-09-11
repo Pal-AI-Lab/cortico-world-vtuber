@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { LogEmitOptions, Logger, LogLevel } from '../../src/core/types.ts';
+import type { LogEmitOptions, Logger, LogLevel } from 'cortico/core/types.ts';
 
 /** io-vtuber 测试共用:合成 PCM16 单声道 wav */
 export function makeWav(samples: number[], sampleRate = 16000): Uint8Array {

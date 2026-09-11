@@ -1,13 +1,13 @@
-import { legacyTap } from '../core/fixture-protocol.ts';
-import { ChatResponseAssembly } from '../../src/providers/transport/response-assembly.ts';
+import { legacyTap } from '../helpers/fixture-stream.ts';
+import { ChatResponseAssembly } from 'cortico/providers/transport/response-assembly.ts';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createServer, get as httpGet, type Server } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
-import type { EventEnvelope, IOModuleHost, PushOptions } from '../../src/core/types.ts';
-import { findFfmpeg } from '../../src/io-vtuber/audio-convert.ts';
+import type { EventEnvelope, IOModuleHost, PushOptions } from 'cortico/core/types.ts';
+import { findFfmpeg } from '../../src/audio-convert.ts';
 import {
   VTUBER_CONFIG_GROUP,
   VTS_STALL_STREAK,
@@ -16,9 +16,9 @@ import {
   VtuberModule,
   silenceReminder,
   type TtsProfile,
-} from '../../src/io-vtuber/module.ts';
-import { EXAMPLE_PACK_DIR } from '../../src/io-vtuber/pack.ts';
-import { decodeWav } from '../../src/io-vtuber/tts.ts';
+} from '../../src/module.ts';
+import { EXAMPLE_PACK_DIR } from '../../src/pack.ts';
+import { decodeWav } from '../../src/tts.ts';
 import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfileDir, type LogLine } from './helpers.ts';
 
 const ffmpegExe = findFfmpeg('');
