@@ -61,8 +61,9 @@ export const VTUBER: IOModuleDefinition<VtuberConfigSection> = {
     ttsProfile: { ...TTS_PROFILE_DEFAULTS },
     overlay: structuredClone(OVERLAY_CONFIG_DEFAULTS),
   }),
-  // 播放设备下拉的选项。枚举本机声卡要 audify,那是本包的依赖;模组自报,宿主与 bot 都不替它答。
-  configOptions: (kind) => playbackConfigOptions(kind),
+  // 播放设备下拉的整张表(含"系统默认 / 不出声"固定项)。枚举本机声卡要 audify,那是本包的
+  // 依赖;模组自报,宿主与 bot 都不替它答,控制台也不认识这两个 kind。
+  configOptions: (kind, language) => playbackConfigOptions(kind, language),
   create: (ctx) => {
     const { cfg } = ctx;
     // 演出包三层,与环境提示词同一套规则:部署覆盖 > 人格包自带 > 模组范例(packDir 为空时)。

@@ -150,12 +150,28 @@ export function listPlaybackDevices(log?: Logger): PlaybackDevice[] {
   }
 }
 
-export function playbackConfigOptions(kind: string, log?: Logger): Array<{ value: string; label: string }> {
+/**
+ * `x-options` 下拉的整张表:固定项在前(主输出:系统默认 / 不出声;副输出:系统默认),
+ * 本机声卡随后。固定项的取值与 `pickDevice` / `secondaryPickQuery` 的约定一致
+ * (主输出空串 = 系统默认、`none` = 静音;副输出 `default` = 系统默认,关闭走旁边的开关)。
+ * 控制台不认识任何 kind,只把这张表原样画出来;不认识的 kind 返回空数组。
+ */
+export function playbackConfigOptions(
+  kind: string,
+  language: 'zh' | 'en' = 'zh',
+  log?: Logger,
+): Array<{ value: string; label: string }> {
   if (kind !== 'playback-primary' && kind !== 'playback-secondary') return [];
-  return listPlaybackDevices(log).map((d) => ({
+  const en = language === 'en';
+  const systemDefault = en ? 'System default' : '系统默认';
+  const heads = kind === 'playback-primary'
+    ? [{ value: '', label: systemDefault }, { value: 'none', label: en ? 'Silent' : '不出声' }]
+    : [{ value: 'default', label: systemDefault }];
+  const live = listPlaybackDevices(log).map((d) => ({
     value: d.name,
-    label: d.isDefault ? `${d.name} · 默认` : d.name,
+    label: d.isDefault ? `${d.name}${en ? ' · default' : ' · 默认'}` : d.name,
   }));
+  return [...heads, ...live];
 }
 
 /**
