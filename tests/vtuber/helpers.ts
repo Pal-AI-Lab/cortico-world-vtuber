@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { LogEmitOptions, Logger, LogLevel } from 'cortico/core/types.ts';
 
-/** io-vtuber 测试共用:合成 PCM16 单声道 wav */
+/** worlds-vtuber 测试共用:合成 PCM16 单声道 wav */
 export function makeWav(samples: number[], sampleRate = 16000): Uint8Array {
   const dataLen = samples.length * 2;
   const buf = new ArrayBuffer(44 + dataLen);

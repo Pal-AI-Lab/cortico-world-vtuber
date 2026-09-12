@@ -18,8 +18,8 @@ import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import type {
-  IOModule,
-  IOModuleHost,
+  World,
+  WorldHost,
   Logger,
   ModuleConsoleDecl,
   OutputTap,
@@ -118,10 +118,10 @@ export function attachStdio(
 }
 
 
-export class VtuberModuleProxy implements IOModule {
+export class VtuberModuleProxy implements World {
   readonly id = 'vtuber';
 
-  private host: IOModuleHost | null = null;
+  private host: WorldHost | null = null;
   private child: ChildProcess | null = null;
   private ready = false;
   private stopping = false;
@@ -168,7 +168,7 @@ export class VtuberModuleProxy implements IOModule {
       invoke: (panel, method, args) => this.invokePanel(panel, method, args),
       promptDocs: [
         {
-          key: 'io.vtuber.envPrompt',
+          key: 'worlds.vtuber.envPrompt',
           title: 'VTuber · 环境提示词',
           description: '直播 / VTuber 渠道的常驻事实（形象动作、气泡、弹幕）。',
           path: ENV_PROMPT_FILE,
@@ -270,7 +270,7 @@ export class VtuberModuleProxy implements IOModule {
   }
 
   /**
-   * 模型档案通过 setProfile 写入 io.vtuber.modelProfile 并持久化。写后立即向子进程推送配置快照，避免随后 state 请求读到采样周期前的旧值；cast 与 req 共用保序 IPC 通道。
+   * 模型档案通过 setProfile 写入 worlds.vtuber.modelProfile 并持久化。写后立即向子进程推送配置快照，避免随后 state 请求读到采样周期前的旧值；cast 与 req 共用保序 IPC 通道。
    */
   private async invokeModel(method: string, args: unknown[]): Promise<unknown> {
     if (method === 'setProfile') {
@@ -404,7 +404,7 @@ export class VtuberModuleProxy implements IOModule {
   onHandoff(): void {
     void this.host
       ?.pushEvent(
-        { ts: new Date().toISOString(), source: this.id, type: 'io.note', origin: 'internal', text: HANDOFF_NOTE },
+        { ts: new Date().toISOString(), source: this.id, type: 'worlds.note', origin: 'internal', text: HANDOFF_NOTE },
         { trigger: 'flush' },
       )
       .catch((e) => this.host?.log.warn('交接开口提示投递失败', { err: String(e) }));
@@ -422,7 +422,7 @@ export class VtuberModuleProxy implements IOModule {
     return this.urls?.overlayUrl ?? '';
   }
 
-  async start(host: IOModuleHost): Promise<void> {
+  async start(host: WorldHost): Promise<void> {
     this.host = host;
     this.stopping = false;
     // 地板扫描只关心启动之后的事件;历史信封不补
@@ -588,7 +588,7 @@ export class VtuberModuleProxy implements IOModule {
         {
           ts: nowIso(this.opts.timezone ?? 'Asia/Shanghai'),
           source: this.id,
-          type: 'io.note',
+          type: 'worlds.note',
           // 模组报自己这一侧机制的话:进 user 区,不进事件帧。
           origin: 'internal',
           text:

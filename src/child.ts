@@ -26,7 +26,7 @@ import type {
 import type {
   EventEnvelope,
   EventStoreReader,
-  IOModuleHost,
+  WorldHost,
   Logger,
   OutputTap,
   ToolDef,
@@ -88,7 +88,7 @@ class SlimEventStore implements EventStoreReader {
 
 const store = new SlimEventStore();
 // 根 logger 不带区域名:主进程那侧的 host.log 已经是本模组的区域,
-// 这里再冠一层会让日志落成 harness.io.vtuber.vtuber
+// 这里再冠一层会让日志落成 core.worlds.vtuber.vtuber
 const log = makeLogger('');
 
 const HOST_RPC_TIMEOUT_MS = 10_000;
@@ -115,7 +115,7 @@ const unavailable = (what: string): never => {
   throw new Error(`${what} 在子进程宿主里不可用`);
 };
 
-const host: IOModuleHost = {
+const host: WorldHost = {
   // 附件随记录过界要走字节序列化,子进程侧不推带附件的事件。
   pushEvent: (e, opts) => hostRpc({ kind: 'push', evt: e as Parameters<typeof host.pushEvent>[0] & { blobs?: undefined }, opts }) as Promise<EventEnvelope>,
   // 渲染回调过不了进程边界;演出状态行的投递成文挂单由主进程代理侧实现(proxy.armStatus)

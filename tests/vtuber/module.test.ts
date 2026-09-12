@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
-import type { EventEnvelope, IOModuleHost, PushOptions } from 'cortico/core/types.ts';
+import type { EventEnvelope, WorldHost, PushOptions } from 'cortico/core/types.ts';
 import { findFfmpeg } from '../../src/audio-convert.ts';
 import {
   VTUBER_CONFIG_GROUP,
@@ -28,7 +28,7 @@ function panelIds(m: VtuberModule): string[] {
   return (m.console().panels ?? []).map((p) => (typeof p === 'string' ? p : p.id));
 }
 
-class FakeHost implements IOModuleHost {
+class FakeHost implements WorldHost {
   events: Array<{ e: EventEnvelope; opts?: PushOptions }> = [];
   pushDeferred(): void {}
   store = {
@@ -37,7 +37,7 @@ class FakeHost implements IOModuleHost {
     range: () => [],
     around: () => [],
     grep: () => [],
-  } as unknown as IOModuleHost['store'];
+  } as unknown as WorldHost['store'];
   blob = (_handle: string): { bytes: Uint8Array; mime: string } | null => null;
   modelFacts = {
     model: () => 'test',
@@ -46,7 +46,7 @@ class FakeHost implements IOModuleHost {
   };
   /** 运行日志流:告警口径的断言看 level,投影断言看 area/event/data。用例会整体换掉这个数组 */
   logs: LogLine[] = [];
-  log = recordingLogger('io.vtuber', (line) => this.logs.push(line));
+  log = recordingLogger('worlds.vtuber', (line) => this.logs.push(line));
 
   async pushEvent(
     e: Omit<EventEnvelope, 'cursor' | 'origin'> & { origin?: EventEnvelope['origin'] },
@@ -288,7 +288,7 @@ describe('VTuber 外置资源配置', () => {
     ] as const;
     for (const key of keys) {
       expect(VTUBER_MODULE_DEFAULTS[key]).toBe('');
-      expect(VTUBER_CONFIG_GROUP.schema.properties[`io.vtuber.${key}`]?.['x-path']).toBeDefined();
+      expect(VTUBER_CONFIG_GROUP.schema.properties[`worlds.vtuber.${key}`]?.['x-path']).toBeDefined();
     }
   });
 });
@@ -640,7 +640,7 @@ describe('VtuberModule', () => {
       expect(result).not.toContain('[演出状态]');
     }
     // 失真要看得见:空调用落 warn 并计入滚动摘要的桶
-    expect(host.logs.some((l) => l.level === 'warn' && l.area === 'io.vtuber.empty-script')).toBe(true);
+    expect(host.logs.some((l) => l.level === 'warn' && l.area === 'worlds.vtuber.empty-script')).toBe(true);
   });
 
   it('非字符串 script 稳定失败，不降成空台本假装本轮沉默', async () => {
@@ -990,24 +990,24 @@ describe('VtuberModule', () => {
     const cut = stage.events.filter((e) => e.type === 'subtitle.cut').pop();
     expect(cut).toMatchObject({ type: 'subtitle.cut', script: '实际听到的半句。' });
 
-    const line = host.logs.find((l) => l.area === 'io.vtuber.subtitle' && l.msg.includes('收束'));
+    const line = host.logs.find((l) => l.area === 'worlds.vtuber.subtitle' && l.msg.includes('收束'));
     expect(line).toBeDefined();
     expect(line?.msg).toContain('演出被打断');
     expect(line).toMatchObject({ event: 'cut', data: { reason: '演出被打断', heardChars: 8 } });
   });
 
   /*
-   * 演出埋点投影到运行日志的规则:通道名 → io.vtuber.<ascii 区域>;级别显式给的优先,
+   * 演出埋点投影到运行日志的规则:通道名 → worlds.vtuber.<ascii 区域>;级别显式给的优先,
    * 否则状态机通道 trace、其余 debug;durMs 与结构化字段各归各的槽,消息不再带前缀。
    */
   describe('演出埋点投影到运行日志', () => {
     type Internals = { tracePerf(lane: string, msg: string, opts?: Record<string, unknown>): void };
 
-    it('状态机通道落 trace,区域是 io.vtuber.state,消息不带 [演出·] 前缀', () => {
+    it('状态机通道落 trace,区域是 worlds.vtuber.state,消息不带 [演出·] 前缀', () => {
       host.logs = [];
       (mod as unknown as Internals).tracePerf('状态', 'emotion → 中性 (fade 200ms)');
       expect(host.logs).toEqual([
-        { area: 'io.vtuber.state', level: 'trace', msg: 'emotion → 中性 (fade 200ms)', event: undefined, durMs: undefined, data: undefined },
+        { area: 'worlds.vtuber.state', level: 'trace', msg: 'emotion → 中性 (fade 200ms)', event: undefined, durMs: undefined, data: undefined },
       ]);
     });
 
@@ -1020,7 +1020,7 @@ describe('VtuberModule', () => {
         data: { recvMs: 812, audioMs: 2400 },
       });
       expect(host.logs).toEqual([{
-        area: 'io.vtuber.tts',
+        area: 'worlds.vtuber.tts',
         level: 'debug',
         msg: '流式收流 812ms → 2400ms 音频',
         event: 'stream-received',
@@ -1035,8 +1035,8 @@ describe('VtuberModule', () => {
       inner.tracePerf('闸门', '拒收:积压 9s 超上限', { level: 'warn', tally: '拒收' });
       inner.tracePerf('新通道', '一句话');
       expect(host.logs).toMatchObject([
-        { area: 'io.vtuber.gate', level: 'warn', msg: '拒收:积压 9s 超上限' },
-        { area: 'io.vtuber.新通道', level: 'debug' },
+        { area: 'worlds.vtuber.gate', level: 'warn', msg: '拒收:积压 9s 超上限' },
+        { area: 'worlds.vtuber.新通道', level: 'debug' },
       ]);
     });
 
@@ -1047,16 +1047,16 @@ describe('VtuberModule', () => {
       await act.handler({ script: '一句话。' }, { role: 'main', log: host.log, callId: 'proj-1' });
       await waitFor(() => host.logs.some((l) => l.event === 'synth'));
       const synth = host.logs.find((l) => l.event === 'synth')!;
-      expect(synth).toMatchObject({ area: 'io.vtuber.tts', level: 'debug' });
+      expect(synth).toMatchObject({ area: 'worlds.vtuber.tts', level: 'debug' });
       expect(typeof synth.durMs).toBe('number');
       const data = synth.data as { synthMs: number; audioMs: number; units: number };
       expect(data.synthMs).toBe(synth.durMs);
       expect(data.audioMs).toBe(100);
       expect(data.units).toBeGreaterThan(0);
       // 开新轮/脚本收完是逐条读得下去的状态迁移:info
-      expect(host.logs.find((l) => l.event === 'round-open')).toMatchObject({ area: 'io.vtuber.round', level: 'info' });
+      expect(host.logs.find((l) => l.event === 'round-open')).toMatchObject({ area: 'worlds.vtuber.round', level: 'info' });
       expect(host.logs.find((l) => l.event === 'script-done')).toMatchObject({
-        area: 'io.vtuber.round', level: 'info', data: { beats: 1, pieces: 1 },
+        area: 'worlds.vtuber.round', level: 'info', data: { beats: 1, pieces: 1 },
       });
     });
   });
@@ -1486,7 +1486,7 @@ describe('VtuberModule', () => {
       host.logs = [];
       for (let i = 0; i < 3; i++) inner.noteVtsInjectWarn(new Error('VTS 连接已关闭'));
       inner.noteVtsInjectWarn(new Error('VTS 请求超时: InjectParameterDataRequest'));
-      const warns = host.logs.filter((l) => l.level === 'warn' && l.area === 'io.vtuber.inject');
+      const warns = host.logs.filter((l) => l.level === 'warn' && l.area === 'worlds.vtuber.inject');
       expect(warns.map((l) => l.msg)).toEqual([
         '注入失败:VTS 连接已关闭',
         '注入失败:VTS 连接已关闭',
@@ -1498,7 +1498,7 @@ describe('VtuberModule', () => {
       await mod.stop();
       const summary = host.logs.find((l) => l.msg.includes('最近'));
       expect(summary?.msg).toContain('注入失败 4');
-      expect(summary).toMatchObject({ area: 'io.vtuber.summary', event: 'summary', data: { tally: { 注入失败: 4 } } });
+      expect(summary).toMatchObject({ area: 'worlds.vtuber.summary', event: 'summary', data: { tally: { 注入失败: 4 } } });
     });
 
     it('中途成功一次就重新计数;非超时的注入错误不计入', () => {

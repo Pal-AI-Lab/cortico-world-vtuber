@@ -1,6 +1,6 @@
 /**
  * 演出包:参数集 + 词表 + 曲线,人格的表达空间。数据来自一个目录
- * (`params.json` + `vocab.json` + `clips.json`),由 bot 提供;io-vtuber 自带
+ * (`params.json` + `vocab.json` + `clips.json`),由 bot 提供;worlds-vtuber 自带
  * `examples/vtuber-pack/` 作缺省与范例。包对所有模型相同,模型差异在 L4 的档案里(`models/`)。
  *
  * 参数集是包自己声明的:曲线只能驱动包里声明的参数,档案的换算也只对这些参数有意义。

@@ -5,7 +5,7 @@
 ## 0. 总览
 
 ```
-事件流 ─→ [调度 Harness] ─→ LLM ─→ 标签脚本流
+事件流 ─→ [调度 Core] ─→ LLM ─→ 标签脚本流
                                       │
               ┌───────────────────────┘
               ▼
@@ -63,7 +63,7 @@ L1 的词表与 L3 的曲线资产合起来是**演出包**(`vocab.json` + `clip
 
 ### 1.2 工具定义
 
-Harness 内演出模块只暴露一个工具;游戏操作等其他工具与其并行,不在本模块范围。
+Core 内演出模块只暴露一个工具;游戏操作等其他工具与其并行,不在本模块范围。
 
 **`vtuber_act(script: string)`**
 - script 为混编台本(标签脚本流)。空串不是"主动沉默":它一个字也播不出去,回执按失败形报,并点名 script 是空的。
@@ -72,7 +72,7 @@ Harness 内演出模块只暴露一个工具;游戏操作等其他工具与其�
 
 ### 1.3 事件注入格式
 
-- 弹幕:带用户名,逐条落一条事件;合批交给 harness 的安静窗口与地板,模组不自己攒。
+- 弹幕:带用户名,逐条落一条事件;合批交给 Core 的安静窗口与地板,模组不自己攒。
 - 游戏事件:文本化的局面描述与事件(对方落子、将军、认输等)。
 - 系统状态:当前模式、正在播放/排队的语音概要(供模型衔接语义)。
 
@@ -148,7 +148,7 @@ Harness 内演出模块只暴露一个工具;游戏操作等其他工具与其�
 每个 State 通道(Pose / Emotion / Gaze)一个**长驻状态机**,beat 仅向其发事件;非逐单元传递。
 
 - 转移:设置 → fade_in ≈ 300ms crossfade;同通道新值直接 crossfade;重复设当前值重发 cue(爆发型 sustain 分量重新起势);超时缓慢衰减回中性(2–3s 淡出);Reset 全清。
-- 超时:默认 Gaze 4–6s,Pose 10–15s,Emotion 20–30s;可在控制台模组配置里按通道热调(`io.vtuber.decay*Sec`)。
+- 超时:默认 Gaze 4–6s,Pose 10–15s,Emotion 20–30s;可在控制台模组配置里按通道热调(`worlds.vtuber.decay*Sec`)。
 - crossfade 由 L2 在 cue 中声明(`fade_in` 字段),L3 执行,L2 不逐帧计算。
 
 ### 3.3 时序:speech_onset 与 gap
@@ -178,7 +178,7 @@ gap = max( boundary_base, max(本beat各标签 speech_onset) )
 
 引用 clip_id,不内联曲线。cue 流可 dump、可重放,作为演出记录与调试手段。
 
-### 3.6 调度 Harness
+### 3.6 调度 Core
 
 拉起 LLM 的节奏归 bot 侧的心跳(装配层在演出链路起着时给 `tickDelayMs` 提速到秒级
 快拍,心跳文案带演出状态行,嘴空没空她自己看);弹幕与游戏事件照常走事件投递。
@@ -205,7 +205,7 @@ gap = max( boundary_base, max(本beat各标签 speech_onset) )
 - N 取延迟分布(prefill + 首 beat 生成 + TTFA)的 **P10–P20 分位**(宁小勿大,禁止反应先于事件)。
 - 配置两个值,都归 vtuber 模组:`obsDelaySec`(OBS 里设的 N)与 `delayedSources`
   (被延迟画面对应的模组 id 数组)。不需要任何游戏→演出的旁路信号:排演出时向
-  harness 的事件库反查 `source ∈ delayedSources` 且 `ts > now − N` 的事件,
+  Core 的事件库反查 `source ∈ delayedSources` 且 `ts > now − N` 的事件,
   **演出锚点 ≥ 事件时刻 + N + ε**。只消费信封的 core 字段(source/ts),不读正文、
   不认识游戏词表;比 now−N 更老的事件给出的地板在过去,扫描天然有界。
 - 地板钳制所有输出、不做因果归因:判断"这段话是不是在说游戏"不可靠,而 N 只有

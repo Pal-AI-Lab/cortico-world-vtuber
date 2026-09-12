@@ -125,7 +125,7 @@ beforeAll(async () => {
   writeFileSync(join(dir, 'clip.wav'), FILE_BYTES);
   const common = {
     store: new FakeStore(),
-    personaDir: dir,
+    memoryDir: dir,
     dataDir: dir,
     getStatus: () => ({}),
     log: nullLogger(),
@@ -133,10 +133,10 @@ beforeAll(async () => {
   app = new WebApp({
     ...common,
     consolePageSources: () => [{
-      id: 'io:vtuber',
+      id: 'world:vtuber',
       contribute: () => ({
-        id: 'io:vtuber',
-        kind: 'io' as const,
+        id: 'world:vtuber',
+        kind: 'world' as const,
         label: 'VTuber',
         availability: 'active' as const,
         panels: Object.keys(panels).map((id) => ({
@@ -167,7 +167,7 @@ afterAll(async () => {
 describe('面板 $file 回执与 GET 白名单的 HTTP 边界', () => {
   it('GET/HEAD 只允许白名单方法，会话与副作用方法返回 405 且不调用 provider', async () => {
     mediaMutationCalls = 0;
-    const root = `http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/media`;
+    const root = `http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/media`;
     expect((await fetch(`${root}/list`)).status).toBe(200);
     const file = await fetch(`${root}/file`);
     expect(file.status).toBe(200);
@@ -182,7 +182,7 @@ describe('面板 $file 回执与 GET 白名单的 HTTP 边界', () => {
       expect((await fetch(`${root}/${method}`, { method: 'HEAD' })).status).toBe(405);
     }
     expect(mediaMutationCalls).toBe(0);
-    expect((await call(port, '/api/console/providers/io%3Avtuber/panels/media/state')).status).toBe(200);
+    expect((await call(port, '/api/console/providers/worlds%3Avtuber/panels/media/state')).status).toBe(200);
     expect(mediaMutationCalls).toBe(1);
   });
 
@@ -191,7 +191,7 @@ describe('面板 $file 回执与 GET 白名单的 HTTP 边界', () => {
     writeFileSync(path, Buffer.from('RIFF-tampered-file'));
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/media/file`,
+        `http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/media/file`,
       );
       expect(response.status).toBe(500);
       expect(response.headers.get('content-type')).toContain('application/json');
@@ -204,42 +204,42 @@ describe('面板 $file 回执与 GET 白名单的 HTTP 边界', () => {
 
 describe('vtuber tts 面板经 provider 通道', () => {
   it('state/start/stop/test 透传', async () => {
-    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/tts/state`)).json()) as any;
+    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/tts/state`)).json()) as any;
     expect(st).toMatchObject({ phase: 'stopped', reachable: false });
 
-    const started = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/start');
+    const started = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/start');
     expect(started.status).toBe(200);
     expect(started.body).toMatchObject({ phase: 'running', pid: 42 });
 
-    const test = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/test');
+    const test = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/test');
     expect(test.body).toMatchObject({ ok: true, message: '合成 OK:900ms 音频', wav: 'UklGRg==' });
 
-    const stopped = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/stop');
+    const stopped = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/stop');
     expect(stopped.body).toMatchObject({ phase: 'stopped' });
   });
 
   it('profile 与带文本/试听档案的 test 透传', async () => {
-    const r = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/setProfile', [{ refAudio: 'mei.wav', temperature: 0.5 }]);
+    const r = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/setProfile', [{ refAudio: 'mei.wav', temperature: 0.5 }]);
     expect(r.body).toMatchObject({ refAudio: 'mei.wav', temperature: 0.5, seed: 42 });
 
-    const t = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/test', ['来一句']);
+    const t = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/test', ['来一句']);
     expect(t.body.message).toContain('文本=来一句');
 
     // 面板上未保存的档案随试听请求一起过去(校验归模组,通道只透传)
-    const audition = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/test', ['听听新声线', { refAudio: '新人.wav', seed: 9 }]);
+    const audition = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/test', ['听听新声线', { refAudio: '新人.wav', seed: 9 }]);
     expect(audition.body.message).toContain('"refAudio":"新人.wav"');
   });
 
   it('声线上传;试听经 GET args 回 wav 字节;不存在 500', async () => {
-    const up = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/saveVoice', ['mei.wav', 'UklGRg==']);
+    const up = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/saveVoice', ['mei.wav', 'UklGRg==']);
     expect(up.body).toMatchObject({ file: 'mei.wav', converted: null });
 
-    const mp3 = await call(port, '/api/console/providers/io%3Avtuber/panels/tts/saveVoice', ['mei.mp3', 'SUQzBA==']);
+    const mp3 = await call(port, '/api/console/providers/worlds%3Avtuber/panels/tts/saveVoice', ['mei.mp3', 'SUQzBA==']);
     expect(mp3.body).toMatchObject({ file: 'mei.wav', converted: 'MP3' });
 
     // <audio src> 只能带 URL:GET + args 查询串
     const wav = await fetch(
-      `http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/tts/voiceWav?args=${encodeURIComponent('["mei.wav"]')}`,
+      `http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/tts/voiceWav?args=${encodeURIComponent('["mei.wav"]')}`,
     );
     expect(wav.status).toBe(200);
     expect(wav.headers.get('content-type')).toContain('audio/wav');
@@ -247,7 +247,7 @@ describe('vtuber tts 面板经 provider 通道', () => {
 
     // 面板走的是 `ctx.invokeBinary`(POST + 随 signal 取消),同一份字节也得回来:
     // 它不再自己拼 URL 造 `new Audio(...)`,而是拿 Blob 喂给一个登记过的 <audio>
-    const posted = await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/tts/voiceWav`, {
+    const posted = await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/tts/voiceWav`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ args: ['mei.wav'] }),
@@ -257,33 +257,33 @@ describe('vtuber tts 面板经 provider 通道', () => {
     expect(Buffer.from(await posted.arrayBuffer()).toString('utf8')).toBe('RIFFfake');
 
     const miss = await fetch(
-      `http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/tts/voiceWav?args=${encodeURIComponent('["none.wav"]')}`,
+      `http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/tts/voiceWav?args=${encodeURIComponent('["none.wav"]')}`,
     );
     expect(miss.status).toBe(500);
   });
 
   it('没有这个 provider → 404', async () => {
-    expect((await fetch(`http://127.0.0.1:${barePort}/api/console/providers/io%3Avtuber/panels/tts/state`)).status).toBe(404);
-    expect((await call(barePort, '/api/console/providers/io%3Avtuber/panels/tts/start')).status).toBe(404);
+    expect((await fetch(`http://127.0.0.1:${barePort}/api/console/providers/worlds%3Avtuber/panels/tts/state`)).status).toBe(404);
+    expect((await call(barePort, '/api/console/providers/worlds%3Avtuber/panels/tts/start')).status).toBe(404);
   });
 });
 
 describe('vtuber align 面板经 provider 通道', () => {
   it('状态 / 单元预览 / 现合一段 / 标注 四条透传', async () => {
-    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/align/state`)).json()) as any;
+    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/align/state`)).json()) as any;
     expect(st).toMatchObject({ available: true, enabled: false, lastOk: null });
 
     // 单元预览:面板边打字边问(合流拍每 300ms 一次),回的是要对齐的单元表
-    const units = await call(port, '/api/console/providers/io%3Avtuber/panels/align/units', ['你好呀']);
+    const units = await call(port, '/api/console/providers/worlds%3Avtuber/panels/align/units', ['你好呀']);
     expect(units.body.units).toEqual(['你', '好', '呀']);
 
     // 「用 TTS 合成这句」:wav 按 base64 回,面板解码后画波形
-    const synth = await call(port, '/api/console/providers/io%3Avtuber/panels/align/synth', ['你好']);
+    const synth = await call(port, '/api/console/providers/worlds%3Avtuber/panels/align/synth', ['你好']);
     expect(Buffer.from(synth.body.wav, 'base64').toString('utf8')).toBe('RIFF你好');
     expect(synth.body.durationMs).toBe(900);
 
     // 标注:音频整段 base64 交回去,回执带单元、时长、过门判据与耗时
-    const run = await call(port, '/api/console/providers/io%3Avtuber/panels/align/align', [synth.body.wav, '你好']);
+    const run = await call(port, '/api/console/providers/worlds%3Avtuber/panels/align/align', [synth.body.wav, '你好']);
     expect(run.body.units).toHaveLength(2);
     expect(run.body.units[0]).toEqual({ text: '你', start: 0, end: 0.2 });
     expect(run.body).toMatchObject({ duration: 0.4, elapsedMs: 12 });
@@ -292,37 +292,37 @@ describe('vtuber align 面板经 provider 通道', () => {
   });
 
   it('没有这个 provider → 404', async () => {
-    expect((await fetch(`http://127.0.0.1:${barePort}/api/console/providers/io%3Avtuber/panels/align/state`)).status).toBe(404);
+    expect((await fetch(`http://127.0.0.1:${barePort}/api/console/providers/worlds%3Avtuber/panels/align/state`)).status).toBe(404);
   });
 });
 
 describe('diag / log / mount 面板', () => {
   it('演出测试与演出日志透传', async () => {
-    const presets = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/diag/presets`)).json()) as any;
+    const presets = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/diag/presets`)).json()) as any;
     expect(presets.presets[0].label).toBe('输棋复盘');
-    const done = await call(port, '/api/console/providers/io%3Avtuber/panels/diag/perform', ['【点头】好。']);
+    const done = await call(port, '/api/console/providers/worlds%3Avtuber/panels/diag/perform', ['【点头】好。']);
     expect(done.body.message).toContain('已排入演出');
 
     const log = (await (
-      await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/log/entries?args=${encodeURIComponent('[0]')}`)
+      await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/log/entries?args=${encodeURIComponent('[0]')}`)
     ).json()) as any;
     expect(log.entries).toHaveLength(1);
     const empty = (await (
-      await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/log/entries?args=${encodeURIComponent('[1]')}`)
+      await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/log/entries?args=${encodeURIComponent('[1]')}`)
     ).json()) as any;
     expect(empty.entries).toEqual([]);
   });
 
   it('VTS 连接控制透传', async () => {
-    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/io%3Avtuber/panels/mount/vtsState`)).json()) as any;
+    const st = (await (await fetch(`http://127.0.0.1:${port}/api/console/providers/worlds%3Avtuber/panels/mount/vtsState`)).json()) as any;
     expect(st.connected).toBe(false);
-    const t0 = await call(port, '/api/console/providers/io%3Avtuber/panels/mount/vtsTest');
+    const t0 = await call(port, '/api/console/providers/worlds%3Avtuber/panels/mount/vtsTest');
     expect(t0.body.message).toContain('未连接');
-    const on = await call(port, '/api/console/providers/io%3Avtuber/panels/mount/vtsConnect');
+    const on = await call(port, '/api/console/providers/worlds%3Avtuber/panels/mount/vtsConnect');
     expect(on.body).toMatchObject({ connected: true });
-    const t1 = await call(port, '/api/console/providers/io%3Avtuber/panels/mount/vtsTest');
+    const t1 = await call(port, '/api/console/providers/worlds%3Avtuber/panels/mount/vtsTest');
     expect(t1.body).toMatchObject({ ok: true, message: '已排入测试动作' });
-    const off = await call(port, '/api/console/providers/io%3Avtuber/panels/mount/vtsDisconnect');
+    const off = await call(port, '/api/console/providers/worlds%3Avtuber/panels/mount/vtsDisconnect');
     expect(off.body).toMatchObject({ connected: false });
   });
 });

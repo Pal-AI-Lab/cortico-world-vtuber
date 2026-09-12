@@ -81,7 +81,7 @@ describe('TtsServerManager', () => {
     mgr = new TtsServerManager({
       serverDir: 'unused',
       port,
-      log: recordingLogger('io.vtuber', (line) => logs.push(line)),
+      log: recordingLogger('worlds.vtuber', (line) => logs.push(line)),
       commandOverride: {
         command: process.execPath,
         args: ['-e', 'process.stderr.write("loading "); process.stderr.write("model\\n\\n"); process.exit(3)'],
@@ -94,10 +94,10 @@ describe('TtsServerManager', () => {
     expect(mgr.state().detail).toContain('code=3');
     await waitFor(() => logs.some((l) => l.event === 'stderr'));
     expect(logs.filter((l) => l.event === 'stderr')).toEqual([
-      { area: 'io.vtuber.server', level: 'debug', event: 'stderr', msg: 'loading model', durMs: undefined, data: undefined },
+      { area: 'worlds.vtuber.server', level: 'debug', event: 'stderr', msg: 'loading model', durMs: undefined, data: undefined },
     ]);
     const exit = logs.find((l) => l.event === 'exit')!;
-    expect(exit).toMatchObject({ area: 'io.vtuber', level: 'warn', msg: 'TTS server 异常', data: { exitCode: 3 } });
+    expect(exit).toMatchObject({ area: 'worlds.vtuber', level: 'warn', msg: 'TTS server 异常', data: { exitCode: 3 } });
     expect((exit.data as { detail: string }).detail).toContain('loading model');
   });
 

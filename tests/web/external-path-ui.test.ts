@@ -91,7 +91,7 @@ describe('VTuber 模型页的 Live2D 目录', () => {
       if (url === '/api/path-picker') return Promise.resolve(json({ path: selected }));
       if (url === '/api/config') {
         // 热配置:保存之后状态接口回显的就是新目录
-        state.live2dDir = body.values['io.vtuber.live2dDir'];
+        state.live2dDir = body.values['worlds.vtuber.live2dDir'];
         return Promise.resolve(json({ result: '已保存' }));
       }
       throw new Error(`未声明的请求：${method} ${url}`);
@@ -101,7 +101,7 @@ describe('VTuber 模型页的 Live2D 目录', () => {
     const root = doc.createElement('div');
     doc.body.appendChild(root);
     const ctx = createPanelContext({
-      pageId: 'io:vtuber',
+      pageId: 'world:vtuber',
       panelId: 'model',
       root,
       lifecycle,
@@ -129,7 +129,7 @@ describe('VTuber 模型页的 Live2D 目录', () => {
     });
     expect(calls.find((call) => call.url === '/api/config')?.body).toEqual({
       group: 'module:vtuber',
-      values: { 'io.vtuber.live2dDir': selected },
+      values: { 'worlds.vtuber.live2dDir': selected },
     });
     expect(field(root, '模型目录').textContent).toContain(selected);
     expect(root.querySelector('.msgline')?.textContent).toBe('模型目录已保存');

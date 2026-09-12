@@ -1,7 +1,7 @@
 # VoxCPM2 最小可用 server 包
 
 随包运行时目录：编译好的 `llama-tts-server` / `voxcpm2-cli`（CUDA 构建）。GGUF
-权重和声线库可放在仓库外，由 `io.vtuber` 的路径配置接入。
+权重和声线库可放在仓库外，由 `worlds.vtuber` 的路径配置接入。
 
 ## 布局
 

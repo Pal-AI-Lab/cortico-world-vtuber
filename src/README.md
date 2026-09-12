@@ -1,6 +1,6 @@
 # io-vtuber
 
-直播演出 IO 模组:消费弹幕与对局事件,输出混编 TTS 语音与 Live2D 动作的连续演出。
+直播演出 World:消费弹幕与对局事件,输出混编 TTS 语音与 Live2D 动作的连续演出。
 设计文档见 [vtuber_performance_module_design.md](vtuber_performance_module_design.md)。
 
 ## 分层
@@ -80,9 +80,9 @@ cue 内是**增量跟播**:每条带 `speakMs`(不含垫时的发声区间),over
 
 ## overlay 画面(控制台面板)
 
-「IO 模组 › vtuber › overlay 画面」:推流链接(复制给 OBS browser source)、预览窗口
+「World › vtuber › overlay 画面」:推流链接(复制给 OBS browser source)、预览窗口
 (iframe,`?bg=dim` 暗背景)、图层开关(字幕/动作气泡/弹幕)与字幕样式(字号/字重/
-行数/字色/描边/底板/字体名)。配置存服务端(`io.vtuber.overlay`,装配层写回
+行数/字色/描边/底板/字体名)。配置存服务端(`worlds.vtuber.overlay`,装配层写回
 config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面——包括 OBS 里那份。
 订阅方也可用 URL 参数按源覆盖图层(`?cues=0` 给正式合成关掉动作气泡)。
 「试显字幕/动作提示/弹幕」把 demo 事件投进演出流,所有 overlay 一起看到。
@@ -100,7 +100,7 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 ## 配置
 
 ```json
-"io": {
+"worlds": {
   "vtuber": {
     "enabled": true,
     "vtsWsUrl": "ws://127.0.0.1:8001",
@@ -128,7 +128,7 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 
 (另有 `ttsProfile` 与 `overlay` 两段由控制台面板写回,不必手填。)
 
-演出包目录是配置项 `io.vtuber.packDir`(控制台「模型档案」面板可选目录,重启生效)。留空时
+演出包目录是配置项 `worlds.vtuber.packDir`(控制台「模型档案」面板可选目录,重启生效)。留空时
 先找部署目录下的 `vtuber-pack/`、再找 bot 包目录下的 `vtuber-pack/`,都没有就用 `examples/vtuber-pack/`。
 
 - 密钥:`.env` 中 `VTS_AUTH_TOKEN`(首次连接在 VTS 弹窗允许后写入)。
@@ -144,7 +144,7 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
   演出反应不早于观众看到的画面(向事件库反查,只看信封的 source/ts)。0 或空=不设地板。
 - `streamEnabled` / `alignEnabled` 是流式输出与逐字对齐的开关(都默认开、都热改),
   行为组合见「流式输出与 <> 锚点」一节;server 侧能力缺席时自动降级,不用手动关。
-- `io.vtuber.ttsProfile` 是声线档案(参考音频/转写/生成参数),控制台面板改动后自动写回。
+- `worlds.vtuber.ttsProfile` 是声线档案(参考音频/转写/生成参数),控制台面板改动后自动写回。
 - `decay*Sec` 是三个 State 通道无新指令后滑回中性的随机区间(秒),控制台可热改。
 - `live2dDir` 是 VTube Studio 加载模型的目录(`StreamingAssets/Live2DModels`),热改。
   模型档案按 `<live2dDir>/<模型目录>/cortico.profile.json` 在这里发现;模型文件仍由
@@ -204,7 +204,7 @@ gaze → `gaze`。fx 没有字典,它的 `clipId` 就是特效 id,模型档案�
 
 ## 挂载
 
-控制台「IO 模组 › vtuber」页第一块是「挂载」:形象(VTS 连接)、声音(TTS server 进程)、
+控制台「World › vtuber」页第一块是「挂载」:形象(VTS 连接)、声音(TTS server 进程)、
 演出流(端口与订阅)各一行状态,各带自己的启停按钮。「一键挂载」把前两条一起带起来
 ——TTS 那头要加载权重、VTS 那头要人去点授权弹窗,两件事并行,完了报每条的结果。
 
@@ -259,7 +259,7 @@ VTS 首次连接要在它的弹窗里允许「Cortico Vtuber」插件(之后 tok
 
 头还没跟上时眼先顶上去(顶到满量程就停在那儿等头,即大幅转向的阶梯式行为),
 头追上后眼自然回落到机位设定值。这就是"眼先冲到位 → 头跟上 → 眼回中",
-总视线全程锁在目标上。测试见 `tests/io-vtuber/mixer.test.ts` 的两条 gaze 用例。
+总视线全程锁在目标上。测试见 `tests/worlds/vtuber/mixer.test.ts` 的两条 gaze 用例。
 
 ## 眼睑:idle 为主,表情帧接管
 
@@ -394,7 +394,7 @@ idle 重新取得控制权，交接会产生可见参数跳变。
 
 **发现与定档。** 连接 VTS 时和控制台「模型档案」面板每次读状态时重扫 `live2dDir`,
 目录与档案文件都可热改;坏文件与重复 id 记进面板的错误列表,不影响其余档案。
-`io.vtuber.modelProfile` 是档案 id 或 `auto`:
+`worlds.vtuber.modelProfile` 是档案 id 或 `auto`:
 
 | 配置 | 结果 |
 |---|---|
@@ -529,7 +529,7 @@ VTS **查不到输入→输出的映射表**(`ParameterSettings` 不在任何 AP
 录 N 秒逐帧值写成带时间戳的单独文件。诊断不挂时混音台零开销(`attachDiagnostics(null)`)。
 
 `ducking` 在 pulse 起始帧将同参数的 State 贡献从 1.0 立即降至 0.3，并在 1 秒内恢复。
-「前倾」与点头叠加时会产生 6.3° 头位跳变；`tests/io-vtuber/diagnostics.test.ts`
+「前倾」与点头叠加时会产生 6.3° 头位跳变；`tests/worlds/vtuber/diagnostics.test.ts`
 通过真实混合链覆盖该行为。
 
 ## 语音链路
@@ -567,7 +567,7 @@ sink 内部是一条按墙钟推进的连续样本时间线:泵保持写入领�
 
 ## 形象与动画资料
 
-模型与它的档案都在 VTube Studio 的 `Live2DModels` 目录里(`io.vtuber.live2dDir`),
+模型与它的档案都在 VTube Studio 的 `Live2DModels` 目录里(`worlds.vtuber.live2dDir`),
 由 VTS 加载;仓库不含模型文件,也没有逐模型的说明文档,一个模型的全部适配信息就是
 它目录里的 `cortico.profile.json`(写法见 [`models/LIVE2D-ADAPTATION.md`](models/LIVE2D-ADAPTATION.md))。
 模组对模型目录只读:发现档案,复检 `.vtube.json`、idle 动画与表情文件。
@@ -580,7 +580,7 @@ expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文�
 ## TTS(VoxCPM2)
 
 随包 server 运行时在 [`voxcpm2-server/`](voxcpm2-server/)；GGUF 与声线库通过
-`io.vtuber.tts*` 路径接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
+`worlds.vtuber.tts*` 路径接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
 
 进程启停在「挂载」面板的「声音」那一行:spawn `llama-tts-server.exe`
 ([`tts-server.ts`](tts-server.ts),端口取自 `ttsUrl`);模组停止时连带停掉它拉起的进程。
@@ -589,7 +589,7 @@ expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文�
 - **声线档案**:参考音频可「从本地导入」,缓存进配置的声线库目录(面板显示实际路径),
   也可直接选库里已有的;「试听参考」原声回放确认选对了人。带转写按续写克隆合成,
   只给音频是纯克隆。生成参数 `seed / cfg_value / inference_timesteps / max_steps / temperature`
-  同面板可调。**「保存档案」是唯一的生效动作**:写回 config.json 的 `io.vtuber.ttsProfile`,
+  同面板可调。**「保存档案」是唯一的生效动作**:写回 config.json 的 `worlds.vtuber.ttsProfile`,
   同时把转写落成同名 `.txt` 侧车(下次选中这条声线自动带回来,清空转写就删掉侧车)。
   改了还没保存时面板会标出来——演出仍走已保存的那份。
 - **参考音频转码**:VoxCPM2 的 `reference_audio` 只吃 wav,声线库因此只存 wav。
@@ -771,7 +771,7 @@ p75 正好是「典型片最多晚 1.7 秒 ≈ 慢片最多早 1.7 秒」的平�
 等 TTS。堆积的语义只有两条出路:排队,或者由她自己打断。
 
 - **`beginRound` 为追加语义**：新轮排在队尾，不修改在播或排队内容。同一条 assistant 消息中的多次 `vtuber_act` 视为同段话的分段，追加且仅豁免积压闸，仍受同轮 act 调用次数上限限制，tap 按轮边界计数。
-- **积压闸**（`io.vtuber.speechCapSec`，默认 20s，x-hot）：跨轮新调用到达时，积压超限则拒收，不合成、不排队，回执明确该段未播出。积压量为在播片剩余时长加排队片时长，未合成片按当前语速估计；心跳的 `statusLine()` 提供本地演出状态。
+- **积压闸**（`worlds.vtuber.speechCapSec`，默认 20s，x-hot）：跨轮新调用到达时，积压超限则拒收，不合成、不排队，回执明确该段未播出。积压量为在播片剩余时长加排队片时长，未合成片按当前语速估计；心跳的 `statusLine()` 提供本地演出状态。
 - 更换话题通过 **`vtuber_interrupt`**，不自动抢占。工具等待收束完成（≤0.65s），并在结果事件持久化后返回回执。
 - 打断栅栏固定为 tap 见到调用头时已创建的最后一个轮号（`Performer.roundFence()` → `preempt({ maxRoundId })`），不影响更晚的轮。同回复中后续 act 可经 tap 先于串行 interrupt handler 开始演出，栅栏保护这些新轮。
 
@@ -792,8 +792,8 @@ p75 正好是「典型片最多晚 1.7 秒 ≈ 慢片最多早 1.7 秒」的平�
 从手上的 PCM 渲染尾巴,`device-audio.ts` 在样本队列的同一坐标上截停并拼接,波形
 连续(切点提前量大于写入领先量,恒落在还没写进设备的区域)。
 
-窗口 `io.vtuber.yieldWindowMs`(默认 500,x-hot;0 = 不找停顿立即收)可热调;
-`io.vtuber.yieldFadeMs`(默认 150,x-hot)是**回落淡出时长**——PCM 不在手
+窗口 `worlds.vtuber.yieldWindowMs`(默认 500,x-hot;0 = 不找停顿立即收)可热调;
+`worlds.vtuber.yieldFadeMs`(默认 150,x-hot)是**回落淡出时长**——PCM 不在手
 或切点越过已合成末尾时退回整体线性淡出才用它。resolve 带回**外流账本**
 (`RoundOutcome[]`:逐拍逐片"播没播、播到哪",切点按单元表反查字符偏移)。
 

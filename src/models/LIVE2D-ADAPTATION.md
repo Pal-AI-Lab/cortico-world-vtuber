@@ -23,7 +23,7 @@
 
 ## 1. 目录约定
 
-`io.vtuber.live2dDir` 指向 VTS 的模型目录 `…/VTube Studio_Data/StreamingAssets/Live2DModels`。
+`worlds.vtuber.live2dDir` 指向 VTS 的模型目录 `…/VTube Studio_Data/StreamingAssets/Live2DModels`。
 bot 在它的每个子目录里找 `cortico.profile.json`;找到几份就有几个可选档案。
 
 适配不改原模型目录。把整个模型目录复制一份,目录名加 `-Cortico` 后缀,所有改动都做在副本上:
@@ -190,7 +190,7 @@ gain 8、atZero −7、neutral 7/8 = 0.875、scale 0.125。
 
 ### 2.8 接上 bot
 
-`config.json` 的 `io.vtuber`:
+`config.json` 的 `worlds.vtuber`:
 
 ```json
 "live2dDir": "L:\\…\\VTube Studio_Data\\StreamingAssets\\Live2DModels",

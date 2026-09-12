@@ -4,7 +4,7 @@
 照着 [`../LIVE2D-ADAPTATION.md`](../LIVE2D-ADAPTATION.md) 给自己的模型写一份时,
 有个真实的参照比照着字段表猜要快。
 
-**它不会被加载。** 运行时只在 `io.vtuber.live2dDir` 指的那个 VTS 模型目录里找档案
+**它不会被加载。** 运行时只在 `worlds.vtuber.live2dDir` 指的那个 VTS 模型目录里找档案
 (`<模型目录>/cortico.profile.json`),一份部署用哪个模型、档案长什么样都在仓库外。
 所以你自己模型的档案**不该**进这个仓库:它跟着模型走,是部署侧的东西。
 

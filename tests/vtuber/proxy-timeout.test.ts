@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import type { IOModuleHost } from 'cortico/core/types.ts';
+import type { WorldHost } from 'cortico/core/types.ts';
 import type { EngineRequest } from '../../src/ipc.ts';
 import { VtuberModuleProxy } from '../../src/proxy.ts';
 
@@ -12,14 +12,14 @@ it('引擎已接收请求但不回执时记故障并取消等待，不重发演�
   const proxy = new VtuberModuleProxy({});
   const inner = proxy as unknown as {
     child: { connected: boolean; pid: number; send(message: { t: string }): void };
-    host: IOModuleHost;
+    host: WorldHost;
     pending: Map<number, unknown>;
     rpc(req: EngineRequest, timeoutMs: number): Promise<unknown>;
   };
   inner.child = { connected: true, pid: 123, send: (message) => { sent.push(message); } };
   inner.host = {
     log: { error: (message: string, data: unknown) => { errors.push({ message, data }); } },
-  } as unknown as IOModuleHost;
+  } as unknown as WorldHost;
   const waiting = inner.rpc({
     kind: 'tool', name: 'vtuber_act', args: { script: '已经递交的演出' }, round: null,
     role: 'main', callId: 'unanswered-act',

@@ -1,11 +1,11 @@
 {
-  "name": "cortico-io-vtuber",
+  "name": "cortico-world-vtuber",
   "version": "0.1.0",
   "type": "module",
-  "description": "Cortico IO module: Live2D VTuber performance — VTube Studio wiring, streaming TTS, forced alignment, subtitle overlay",
+  "description": "Cortico World: Live2D VTuber performance — VTube Studio wiring, streaming TTS, forced alignment, subtitle overlay",
   "license": "MIT",
   "keywords": [
-    "cortico-module",
+    "cortico-world",
     "cortico",
     "vtuber",
     "live2d",
@@ -18,8 +18,8 @@
   "packageManager": "pnpm@11.5.0",
   "main": "./src/index.ts",
   "cortico": {
-    "kind": "io",
-    "api": 1,
+    "kind": "world",
+    "api": 2,
     "consoleClient": "dist/console.js",
     "consoleStyle": "dist/console.css"
   },

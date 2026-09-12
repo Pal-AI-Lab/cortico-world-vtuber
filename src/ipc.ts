@@ -105,14 +105,14 @@ export type EngineCast =
 /** 子 → 主的无回执通知。 */
 export type EngineNote =
   | LogNote
-  | { kind: 'usage'; usage: LLMUsage; opts?: Parameters<import('cortico/core/types.ts').IOModuleHost['reportUsage']>[1] }
+  | { kind: 'usage'; usage: LLMUsage; opts?: Parameters<import('cortico/core/types.ts').WorldHost['reportUsage']>[1] }
   | { kind: 'status'; line: string | null; live: boolean; decl: Pick<ModuleConsoleDecl, 'lamps' | 'badges' | 'links'> }
   | { kind: 'tts-profile'; profile: TtsProfile }
   | { kind: 'overlay-config'; config: OverlayConfig }
   | { kind: 'vts-token'; token: string };
 
 /**
- * 子 → 主:宿主调用(IOModuleHost 有回执的那几个方法,跨进程兑现真实结果)。
+ * 子 → 主:宿主调用(WorldHost 有回执的那几个方法,跨进程兑现真实结果)。
  * drain 的 filter 函数过不了界:跨进程宿主只支持"取本模组来源的事件"这一种。
  */
 export type HostRequest =

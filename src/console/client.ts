@@ -454,7 +454,7 @@ const plugin: ConsoleClientPlugin = {
    *
    * 声明与插件**同进同退**:这里少一个键,控制台就给一张"插件缺这个面板"的错误卡;
    * 那边少一条声明,面板就在导航里够不着。八个面板两处必须逐条对上——
-   * `tests/web/io-vtuber-console.test.ts` 拿这两份清单对咬。
+   * `tests/web/worlds-vtuber-console.test.ts` 拿这两份清单对咬。
    */
   panels: {
     mount: mountPanel,

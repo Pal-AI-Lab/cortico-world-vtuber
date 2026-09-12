@@ -12,12 +12,12 @@ import { VTUBER_PANEL_DECLS } from '../../src/module.ts';
 import { VtuberModuleProxy } from '../../src/proxy.ts';
 import { ioPageContribution } from 'cortico/bot.ts';
 import type { ModulePanelDecl } from 'cortico/core/types.ts';
-import { fixtureProfileJson, writeProfileDir } from '../io-vtuber/helpers.ts';
+import { fixtureProfileJson, writeProfileDir } from '../vtuber/helpers.ts';
 
 /**
  * 插件是浏览器端代码(DOM 类型,由 tsconfig.web.json 单独 check)。
  * specifier 存进变量,免得根 tsconfig 把它拉进 Node 那份检查——
- * 与 io-qq-console.test.ts 同一个理由。
+ * 与 worlds-qq-console.test.ts 同一个理由。
  */
 const VT_PLUGIN_ENTRY = '../../src/console/client.ts';
 const CONSOLE_DIR = '../../src/console';
@@ -67,7 +67,7 @@ describe('VTuber 的面板声明', () => {
 
   it('适配成 provider 贡献后:id 原样、标题与说明照带', () => {
     const c = contribution(proxy());
-    expect(c.id).toBe('io:vtuber');
+    expect(c.id).toBe('world:vtuber');
     expect(c.panels?.map((p) => p.id)).toEqual(PANEL_IDS);
     expect(c.panels?.[0].title).toBe('挂载');
     expect(c.panels?.[0].description).toContain('三条链路');
@@ -76,7 +76,7 @@ describe('VTuber 的面板声明', () => {
   it('环境提示词只有 vtuber.vocab 一个洞:声明、运行时值、模板三方一致,渲染后词表行进正文', () => {
     const p = proxy();
     const docs = p.console().promptDocs ?? [];
-    expect(docs.map((d) => d.key)).toEqual(['io.vtuber.envPrompt']);
+    expect(docs.map((d) => d.key)).toEqual(['worlds.vtuber.envPrompt']);
     expect(docs[0].vars?.map((v) => v.name)).toEqual(['vtuber.vocab']);
     const vars = p.envPromptVars();
     expect(Object.keys(vars)).toEqual(['vtuber.vocab']);

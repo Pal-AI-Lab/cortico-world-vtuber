@@ -1,7 +1,7 @@
 /**
  * 面板 `overlay` —— Overlay 画面:推流链接 / 图层开关 / 字幕样式 / 试显 / 预览。
  *
- * overlay 页本身归 io-vtuber(演出流服务直接 serve),这里只是它的遥控器:配置存
+ * overlay 页本身归 worlds-vtuber(演出流服务直接 serve),这里只是它的遥控器:配置存
  * 服务端,改动即 SSE 热推给所有订阅中的页面——包括 OBS 里那份。
  *
  * 预览是一个真 iframe:里面跑着一整份 overlay 渲染(SSE 订阅 + 动画)。所以它

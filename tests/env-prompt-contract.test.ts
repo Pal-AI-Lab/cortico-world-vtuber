@@ -10,11 +10,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { envPromptDocOf, renderModuleEnvPrompt } from 'cortico/core/prefix.ts';
 import { templateVarNames } from 'cortico/core/template.ts';
-import type { IOModule } from 'cortico/core/types.ts';
+import type { World } from 'cortico/core/types.ts';
 import { VtuberModuleProxy } from '../src/proxy.ts';
 
 /** 只构造模组，不启动外部连接。 */
-const MODULES: Array<() => IOModule> = [
+const MODULES: Array<() => World> = [
   () => new VtuberModuleProxy(),
 ];
 
@@ -48,12 +48,12 @@ describe('环境提示词模板契约', () => {
   it('模组自己关掉半边功能时整段不进前缀,连模板都不读', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nullprompt-'));
     const path = join(dir, 'ENV_PROMPT.md');
-    const mod: IOModule = {
+    const mod: World = {
       id: 'nullprompt',
       envPromptVars: () => null,
       console: () => ({
         promptDocs: [
-          { key: 'io.nullprompt.envPrompt', title: 'nullprompt · 环境提示词', description: '测试模板', path, role: 'envPrompt' },
+          { key: 'worlds.nullprompt.envPrompt', title: 'nullprompt · 环境提示词', description: '测试模板', path, role: 'envPrompt' },
         ],
       }),
       tools: () => [],

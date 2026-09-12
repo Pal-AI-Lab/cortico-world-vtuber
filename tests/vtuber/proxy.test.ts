@@ -4,13 +4,13 @@ import { createServer, type Server } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { EventEnvelope, IOModuleHost, PushOptions } from 'cortico/core/types.ts';
+import type { EventEnvelope, WorldHost, PushOptions } from 'cortico/core/types.ts';
 import { PassThrough } from 'node:stream';
 import { HANDOFF_NOTE } from '../../src/module.ts';
 import { attachStdio, VtuberModuleProxy } from '../../src/proxy.ts';
 import { makeWav, recordingLogger, type LogLine } from './helpers.ts';
 
-class FakeHost implements IOModuleHost {
+class FakeHost implements WorldHost {
   events: Array<{ e: EventEnvelope; opts?: PushOptions }> = [];
   deferred: Array<{
     type: string;
@@ -34,17 +34,17 @@ class FakeHost implements IOModuleHost {
     range: () => [],
     around: () => [],
     grep: () => [],
-  } as unknown as IOModuleHost['store'];
+  } as unknown as WorldHost['store'];
   blob = (_handle: string): { bytes: Uint8Array; mime: string } | null => null;
   modelFacts = {
     model: () => 'test',
     accepts: () => false,
     contextWindow: () => 128000,
   };
-  log: IOModuleHost['log'];
+  log: WorldHost['log'];
 
   constructor() {
-    this.log = recordingLogger('io.vtuber', (line) => this.logs.push(line));
+    this.log = recordingLogger('worlds.vtuber', (line) => this.logs.push(line));
   }
 
   async pushEvent(e: Omit<EventEnvelope, 'cursor'>, opts?: PushOptions): Promise<EventEnvelope> {
@@ -207,12 +207,12 @@ describe('VtuberModuleProxy(演出引擎子进程)', () => {
     expect(result).not.toContain('已开演(流式)');
   });
 
-  it('子进程日志落在模组自己的区域,不多冠一层;演出通道跨 IPC 后仍是 io.vtuber.<通道>', async () => {
+  it('子进程日志落在模组自己的区域,不多冠一层;演出通道跨 IPC 后仍是 worlds.vtuber.<通道>', async () => {
     await waitFor(() => host.logs.some((l) => l.event === 'round-open'));
     const open = host.logs.find((l) => l.event === 'round-open');
     // host 给的区域就是模组的区域;子进程的根 logger 不再叠一次模组名
-    expect(open).toMatchObject({ area: 'io.vtuber.round', level: 'info' });
-    expect(host.logs.every((l) => l.area === 'io.vtuber' || l.area.startsWith('io.vtuber.'))).toBe(true);
+    expect(open).toMatchObject({ area: 'worlds.vtuber.round', level: 'info' });
+    expect(host.logs.every((l) => l.area === 'worlds.vtuber' || l.area.startsWith('worlds.vtuber.'))).toBe(true);
     expect(host.logs.some((l) => l.area.includes('vtuber.vtuber'))).toBe(false);
   });
 
@@ -315,7 +315,7 @@ describe('演出引擎子进程退出的告知', () => {
       audioDevice: () => 'none',
       speechCapSec: () => 30,
     });
-    (proxy as unknown as { host: IOModuleHost }).host = host;
+    (proxy as unknown as { host: WorldHost }).host = host;
     const inner = proxy as unknown as Internals;
     return { proxy, host, inner };
   }
@@ -325,12 +325,12 @@ describe('演出引擎子进程退出的告知', () => {
     vi.clearAllTimers?.();
   });
 
-  it('交接钩子:代理侧直接推一条 internal io.note(flush 档),不经子进程', () => {
+  it('交接钩子:代理侧直接推一条 internal worlds.note(flush 档),不经子进程', () => {
     const { proxy, host } = makeIdleProxy();
     proxy.onHandoff();
     expect(host.events).toHaveLength(1);
     const { e, opts } = host.events[0];
-    expect(e.type).toBe('io.note');
+    expect(e.type).toBe('worlds.note');
     expect(e.origin).toBe('internal');
     expect(e.text).toBe(HANDOFF_NOTE);
     expect(opts?.trigger).toBe('flush');
@@ -342,7 +342,7 @@ describe('演出引擎子进程退出的告知', () => {
     if (inner.restartTimer) clearTimeout(inner.restartTimer);
 
     expect(host.logs.some((l) => l.level === 'error' && l.msg.includes('意外退出'))).toBe(true);
-    const note = host.events.find((x) => x.e.type === 'io.note');
+    const note = host.events.find((x) => x.e.type === 'worlds.note');
     expect(note).toBeDefined();
     // 报障是模组自己这一侧机制的话:进 user 区,不落进「保持怀疑」的事件帧
     expect(note!.e.origin).toBe('internal');
@@ -369,7 +369,7 @@ describe('attachStdio', () => {
     const logs: LogLine[] = [];
     const stdout = new PassThrough();
     const stderr = new PassThrough();
-    attachStdio({ stdout, stderr }, () => recordingLogger('io.vtuber', (line) => logs.push(line)));
+    attachStdio({ stdout, stderr }, () => recordingLogger('worlds.vtuber', (line) => logs.push(line)));
     stdout.write('第一行前半 ');
     stdout.write('后半\n\n  第二行  \n尾巴没有换行');
     stdout.end();
@@ -377,12 +377,12 @@ describe('attachStdio', () => {
     stderr.end();
     await waitFor(() => logs.length >= 4, 2000);
     expect(logs.filter((l) => l.event === 'stdout')).toEqual([
-      { area: 'io.vtuber.stdio', level: 'debug', event: 'stdout', msg: '第一行前半 后半', durMs: undefined, data: undefined },
-      { area: 'io.vtuber.stdio', level: 'debug', event: 'stdout', msg: '第二行', durMs: undefined, data: undefined },
-      { area: 'io.vtuber.stdio', level: 'debug', event: 'stdout', msg: '尾巴没有换行', durMs: undefined, data: undefined },
+      { area: 'worlds.vtuber.stdio', level: 'debug', event: 'stdout', msg: '第一行前半 后半', durMs: undefined, data: undefined },
+      { area: 'worlds.vtuber.stdio', level: 'debug', event: 'stdout', msg: '第二行', durMs: undefined, data: undefined },
+      { area: 'worlds.vtuber.stdio', level: 'debug', event: 'stdout', msg: '尾巴没有换行', durMs: undefined, data: undefined },
     ]);
     expect(logs.filter((l) => l.event === 'stderr')).toEqual([
-      { area: 'io.vtuber.stdio', level: 'warn', event: 'stderr', msg: 'boom', durMs: undefined, data: undefined },
+      { area: 'worlds.vtuber.stdio', level: 'warn', event: 'stderr', msg: 'boom', durMs: undefined, data: undefined },
     ]);
   });
 
@@ -393,7 +393,7 @@ describe('attachStdio', () => {
     attachStdio({ stdout, stderr: null }, () => log);
     stdout.write('没人接\n');
     await new Promise((r) => setImmediate(r));
-    log = recordingLogger('io.vtuber', (line) => logs.push(line));
+    log = recordingLogger('worlds.vtuber', (line) => logs.push(line));
     stdout.write('有人接\n');
     await waitFor(() => logs.length >= 1, 2000);
     expect(logs.map((l) => l.msg)).toEqual(['有人接']);

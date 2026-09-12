@@ -1,6 +1,6 @@
-# cortico-io-vtuber
+# cortico-world-vtuber
 
-[Cortico](https://github.com/Phantivia/Cortico) 的 VTuber 演出 IO 模组,以独立 npm 包发布。
+[Cortico](https://github.com/Phantivia/Cortico) 的 VTuber 演出 World,以独立 npm 包发布。
 
 模组把一段台本变成**连续演出**:文本经流式 TTS 出声,同一段文本解析出的动作记号驱动
 Live2D 模型(经 VTube Studio 的 Public API 注入参数),字幕按强制对齐器给出的时间点
@@ -16,12 +16,12 @@ Live2D 模型(经 VTube Studio 的 Public API 注入参数),字幕按强制对�
 这是一个**插件包**,不是 Cortico 的一部分。它按 Cortico 的插件契约声明自己:
 
 ```jsonc
-"cortico": { "kind": "io", "api": 1, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
+"cortico": { "kind": "world", "api": 1, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
 ```
 
-运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/modules.ts`、
+运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/worlds.ts`、
 `cortico/core/types.ts` …)。这些 specifier 由框架 `src/plugins/runtime.ts` 注册的模块
-钩子解析到框架源码本身,**同一份实例**——插件与框架共用一个 `ModuleAssembly`、一套
+钩子解析到框架源码本身,**同一份实例**——插件与框架共用一个 `WorldAssembly`、一套
 日志锚点。因此包必须是 `"type": "module"`:CommonJS 包经 require 会拿到框架源码的
 第二份副本。
 

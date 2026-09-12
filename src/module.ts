@@ -1,6 +1,6 @@
 import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
 /**
- * VtuberModule — 直播演出 IO 模组。
+ * VtuberModule — 直播演出 World。
  *
  * 分层(设计 vtuber_performance_module_design.md):
  * - L1 暴露台本演出与打断工具;
@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 import type {
   ConfigGroup,
   EventStoreReader,
-  IOModule,
-  IOModuleHost,
+  World,
+  WorldHost,
   Logger,
   ModuleConsoleDecl,
   ModulePanelDecl,
@@ -129,7 +129,7 @@ export const OVERLAY_CONFIG_DEFAULTS: OverlayConfig = {
 };
 
 export const VTUBER_MODULE_DEFAULTS = {
-  // enabled 由人格核心的装配层显式开启。
+  // enabled 由Persona的装配层显式开启。
   enabled: false,
   vtsWsUrl: 'ws://127.0.0.1:8001',
   /** 演出流服务(SSE /stream + WS /danmaku)的偏好端口;被占顺延 */
@@ -234,7 +234,7 @@ const SILENCE_LINES: ReadonlyArray<ReadonlyArray<(sec: number) => string>> = [
 
 /**
  * 按级别选择静默提醒，越界使用最高级。custom 以 | 分隔变体，{sec} 代入秒数，空值使用内置池。
- * stalls 来自 IOModuleHost.llmStalls，大于零时注明这段安静包含模型调用阻塞，区分未发言与未获得发言机会。
+ * stalls 来自 WorldHost.llmStalls，大于零时注明这段安静包含模型调用阻塞，区分未发言与未获得发言机会。
  */
 export function silenceReminder(tier: number, sec: number, custom?: string, stalls = 0): string {
   const why =
@@ -330,13 +330,13 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
     title: 'VTuber · 演出',
     description: 'VTube Studio、演出流与 TTS 地址;改完重启生效。',
     properties: {
-      'io.vtuber.vtsWsUrl': {
+      'worlds.vtuber.vtsWsUrl': {
         type: 'string',
         title: 'VTS WebSocket',
         'x-hot': false,
         description: '默认 ws://127.0.0.1:8001',
       },
-      'io.vtuber.streamPort': {
+      'worlds.vtuber.streamPort': {
         type: 'integer',
         title: '演出流端口(偏好)',
         minimum: 0,
@@ -344,13 +344,13 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': false,
         description: '/overlay(演出画面页)、SSE /stream 与 WS /danmaku(观众弹幕入)。被占用时自动顺延。',
       },
-      'io.vtuber.ttsUrl': {
+      'worlds.vtuber.ttsUrl': {
         type: 'string',
         title: 'TTS(VoxCPM2)',
         'x-hot': false,
         description: '默认 http://127.0.0.1:8010(VTS 占了 8001)',
       },
-      'io.vtuber.ttsBaseLmFile': {
+      'worlds.vtuber.ttsBaseLmFile': {
         type: 'string',
         title: 'VoxCPM2 BaseLM',
         'x-hot': false,
@@ -365,7 +365,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         },
         description: '留空沿用 voxcpm2-server/models/VoxCPM2-BaseLM-Q8_0.gguf。已运行的服务需停掉再启动。',
       },
-      'io.vtuber.ttsAcousticFile': {
+      'worlds.vtuber.ttsAcousticFile': {
         type: 'string',
         title: 'VoxCPM2 Acoustic',
         'x-hot': false,
@@ -380,7 +380,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         },
         description: '留空沿用 voxcpm2-server/models/VoxCPM2-Acoustic-F16.gguf。已运行的服务需停掉再启动。',
       },
-      'io.vtuber.ttsAlignerLmFile': {
+      'worlds.vtuber.ttsAlignerLmFile': {
         type: 'string',
         title: 'ForcedAligner LM',
         'x-hot': false,
@@ -396,7 +396,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         description:
           '可选。留空按旧文件名查找 Q8_0 或 F16 GGUF；上游只有 safetensors，需运行 scripts/aligner-gguf.ts 转换。',
       },
-      'io.vtuber.ttsAlignerAudioFile': {
+      'worlds.vtuber.ttsAlignerAudioFile': {
         type: 'string',
         title: 'ForcedAligner Audio',
         'x-hot': false,
@@ -412,7 +412,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         description:
           '可选。留空沿用旧文件名；上游只有 safetensors，需运行 scripts/aligner-gguf.ts 转换并与 LM 成对使用。',
       },
-      'io.vtuber.ttsVoicesDir': {
+      'worlds.vtuber.ttsVoicesDir': {
         type: 'string',
         title: '声线库目录',
         'x-hot': true,
@@ -422,7 +422,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         },
         description: '参考音频 wav 与同名 .txt 转写的目录。留空沿用 voxcpm2-server/voices。',
       },
-      'io.vtuber.packDir': {
+      'worlds.vtuber.packDir': {
         type: 'string',
         title: '演出包目录',
         'x-hot': false,
@@ -433,13 +433,13 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '填了就压过这三层——指到仓库外的包时用它。' +
           '换目录重启生效;改目录里的文件用「动作调参」的重载。',
       },
-      'io.vtuber.mutedTexts': {
+      'worlds.vtuber.mutedTexts': {
         type: 'string',
         title: '禁播词',
         'x-hot': true,
         description: '| 分隔多条。台本流里出现这些子串的整段不进 TTS、不上字幕。留空不过滤。',
       },
-      'io.vtuber.live2dDir': {
+      'worlds.vtuber.live2dDir': {
         type: 'string',
         title: 'VTube Studio 模型目录',
         'x-hot': true,
@@ -451,27 +451,27 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           'VTube Studio 加载模型的目录(StreamingAssets/Live2DModels)。模型档案按 <模型目录>/cortico.profile.json 在这里发现;' +
           '复检时只读模型目录里的 .vtube.json 与表情/动画文件,模型仍由 VTS 加载。',
       },
-      'io.vtuber.audioDevice': {
+      'worlds.vtuber.audioDevice': {
         type: 'string',
         title: '音频主输出',
         'x-hot': true,
         'x-options': 'playback-primary',
         description: 'TTS 主设备。虚拟线(CABLE Input)给 OBS 采;系统默认或 none=不出声。热改下一片语音生效。',
       },
-      'io.vtuber.audioMirrorSystem': {
+      'worlds.vtuber.audioMirrorSystem': {
         type: 'boolean',
         title: '副输出',
         'x-hot': true,
         description: '再写一份到下面选的设备。主副落到同一设备时不重复。热改下一片语音生效。',
       },
-      'io.vtuber.audioSecondary': {
+      'worlds.vtuber.audioSecondary': {
         type: 'string',
         title: '副输出设备',
         'x-hot': true,
         'x-options': 'playback-secondary',
         description: '副输出的目标。系统默认会跟当前默认播放设备(换耳机在下一片或约 0.5s 内切)。',
       },
-      'io.vtuber.streamEnabled': {
+      'worlds.vtuber.streamEnabled': {
         type: 'boolean',
         title: '流式输出',
         'x-hot': true,
@@ -479,7 +479,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           'TTS 边合成边播,首声延迟从整段合成的 3 秒级降到 1 秒内。需要 TTS server 支持流式端点;' +
           '不支持或临时不可用时自动回落为整段合成,不用手动关。',
       },
-      'io.vtuber.speechCapSec': {
+      'worlds.vtuber.speechCapSec': {
         type: 'integer',
         title: '语音积压上限(秒)',
         minimum: 3,
@@ -489,7 +489,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         description:
           '排队闸:嘴里没说完的超过这个秒数,新台词不排入(回执告知,说完后再开口)。',
       },
-      'io.vtuber.maxActRoundsPerTurn': {
+      'worlds.vtuber.maxActRoundsPerTurn': {
         type: 'integer',
         title: '同轮演出封顶(次)',
         minimum: 1,
@@ -499,7 +499,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '复读风暴保险:同一次 LLM 回复里最多开这么多演出轮,之后的 vtuber_act 拒收。' +
           '同轮追加豁免积压闸,失控回复靠这个次数上限兜住;正常分段远用不满。',
       },
-      'io.vtuber.silenceRemindSec': {
+      'worlds.vtuber.silenceRemindSec': {
         type: 'integer',
         title: '静默一级(秒)',
         minimum: 1,
@@ -508,7 +508,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': true,
         description: '安静满该秒数投第一级提醒;开口后重新计。',
       },
-      'io.vtuber.silenceRemind2Sec': {
+      'worlds.vtuber.silenceRemind2Sec': {
         type: 'integer',
         title: '静默二级(秒)',
         minimum: 0,
@@ -517,7 +517,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': true,
         description: '总静默达到该秒数投第二级(措辞更急);0 或不大于一级 = 停用此级。',
       },
-      'io.vtuber.silenceRemind3Sec': {
+      'worlds.vtuber.silenceRemind3Sec': {
         type: 'integer',
         title: '静默三级(秒)',
         minimum: 0,
@@ -526,25 +526,25 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': true,
         description: '总静默达到该秒数投第三级(最急);0 或不大于二级 = 停用此级。',
       },
-      'io.vtuber.silenceLine1': {
+      'worlds.vtuber.silenceLine1': {
         type: 'string',
         title: '一级措辞',
         'x-hot': true,
         description: '留空用内置措辞池;多个变体用 | 分隔,{sec} 处代入静默秒数。',
       },
-      'io.vtuber.silenceLine2': {
+      'worlds.vtuber.silenceLine2': {
         type: 'string',
         title: '二级措辞',
         'x-hot': true,
         description: '同上;这一级该有点催促感了。',
       },
-      'io.vtuber.silenceLine3': {
+      'worlds.vtuber.silenceLine3': {
         type: 'string',
         title: '三级措辞',
         'x-hot': true,
         description: '同上;最后一级,不留台阶。',
       },
-      'io.vtuber.obsDelaySec': {
+      'worlds.vtuber.obsDelaySec': {
         type: 'number',
         title: 'OBS 播出延迟(秒)',
         minimum: 0,
@@ -554,7 +554,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         description:
           'OBS 对游戏画面设的固定延迟:延迟源近期有事件时,演出反应不早于观众看到的画面。0=未标定不设地板。',
       },
-      'io.vtuber.delayedSources': {
+      'worlds.vtuber.delayedSources': {
         type: 'array',
         title: '延迟画面的模组',
         'x-hot': true,
@@ -562,7 +562,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '被 OBS 延迟的画面对应的模组 id 数组(如 ["minecraft"]);地板只看这些来源的事件。' +
           '控制台只读展示,改 config.json 生效。',
       },
-      'io.vtuber.yieldWindowMs': {
+      'worlds.vtuber.yieldWindowMs': {
         type: 'integer',
         title: '打断收束窗口(ms)',
         minimum: 0,
@@ -573,7 +573,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '打断/抢占时在这个窗口内找最近的自然停顿(单元间隙)收住旧话,找不到就立即淡出。' +
           '0 = 不找停顿,永远立即淡出。',
       },
-      'io.vtuber.yieldFadeMs': {
+      'worlds.vtuber.yieldFadeMs': {
         type: 'integer',
         title: '打断回落淡出(ms)',
         minimum: 30,
@@ -584,7 +584,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '收束正常走音素感知切断:按切点处的信号(浊音/擦音/静音)给 6-70ms 的衰减,不用这个值。' +
           '这里是回落档——舞台页未连或切点处 PCM 不在手时,退回整体线性淡出的时长。',
       },
-      'io.vtuber.alignEnabled': {
+      'worlds.vtuber.alignEnabled': {
         type: 'boolean',
         title: '逐字对齐',
         'x-hot': true,
@@ -593,7 +593,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '对齐退化顺带当 TTS 质量门。需要 server 带对齐模型;拿不到时片内动作退化为按字符比例估计。' +
           '关闭时流式片沿 <> 剪开、在接缝处触发动作。',
       },
-      'io.vtuber.modelProfile': {
+      'worlds.vtuber.modelProfile': {
         type: 'string',
         title: '模型档案',
         'x-hot': true,
@@ -602,7 +602,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
           '头部转多少度、眼睑"正常睁眼"是多少输入量、左右眉是不是共用一路,每个模型作者的接法都不同;' +
           '换算全在档案里,词表与动作曲线不随模型变。auto = 按 VTS 报的模型名认;指了不存在的 id 会大声报错。',
       },
-      'io.vtuber.decayGazeSec': {
+      'worlds.vtuber.decayGazeSec': {
         type: 'array',
         title: '注视回落(秒)',
         items: { type: 'number', minimum: 1, maximum: 600 },
@@ -612,7 +612,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': true,
         description: '「看向…」之后无新指令,随机等这么久滑回默认注视。',
       },
-      'io.vtuber.decayPoseSec': {
+      'worlds.vtuber.decayPoseSec': {
         type: 'array',
         title: '姿态回落(秒)',
         items: { type: 'number', minimum: 1, maximum: 600 },
@@ -622,7 +622,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': true,
         description: '歪头/前倾这类保持姿态的持续时间区间。',
       },
-      'io.vtuber.decayEmotionSec': {
+      'worlds.vtuber.decayEmotionSec': {
         type: 'array',
         title: '表情回落(秒)',
         items: { type: 'number', minimum: 1, maximum: 600 },
@@ -746,7 +746,7 @@ export interface VtuberModuleOptions {
   ttsVoicesDir?: () => string;
   /** VTube Studio 部署目录的记录值；模组不直接加载其中的文件。 */
   live2dDir?: () => string;
-  /** 演出包目录(params.json + vocab.json + clips.json);空 = io-vtuber 自带的范例包。启动时读一次,控制台「动作调参」可重载同一目录。 */
+  /** 演出包目录(params.json + vocab.json + clips.json);空 = worlds-vtuber 自带的范例包。启动时读一次,控制台「动作调参」可重载同一目录。 */
   packDir?: string;
   /** Initial voice profile. */
   ttsProfile?: Partial<TtsProfile>;
@@ -849,7 +849,7 @@ const DIAG_AUTODUMP_MS = 5000;
  */
 const WARN_SUMMARY_MS = 10 * 60_000;
 /**
- * 演出通道名 → 运行日志区域后缀(io.vtuber.<后缀>)。表外的通道名原样作后缀。
+ * 演出通道名 → 运行日志区域后缀(worlds.vtuber.<后缀>)。表外的通道名原样作后缀。
  * 通道名是控制台日志面板的显示名,区域是 grep 与 logging.areas 门槛用的稳定名。
  */
 const LANE_AREA: Record<string, string> = {
@@ -1069,7 +1069,7 @@ export const PERFORM_PRESETS: Array<{ label: string; script: string }> = [
 ];
 
 /**
- * 停机等待整个演出队列（在播与排队）的时限。SHUTDOWN_RPC_TIMEOUT_MS 须覆盖此期限，且二者均须小于 SHUTDOWN_BUDGET_MS.modules 的全部 IO 收尾预算，为其他模组保留收尾时间。
+ * 停机等待整个演出队列（在播与排队）的时限。SHUTDOWN_RPC_TIMEOUT_MS 须覆盖此期限，且二者均须小于 SHUTDOWN_BUDGET_MS.worlds 的全部 IO 收尾预算，为其他模组保留收尾时间。
  */
 export const SHUTDOWN_DRAIN_MAX_MS = 10_000;
 
@@ -1083,7 +1083,7 @@ export const SHUTDOWN_DRAIN_MAX_MS = 10_000;
 export const VTS_STALL_STREAK = 4;
 
 /**
- * 交接后推进她上下文的开口提示(internal io.note,flush 档)。交接归档把她自己的
+ * 交接后推进她上下文的开口提示(internal worlds.note,flush 档)。交接归档把她自己的
  * 演出调用整条摘掉,新 session 里没有一条 vtuber_act 的用法示范;这一条替代示范,
  * 把「上文没有不等于没说过」和「现在就开口」说在她读到新一批事件之前。
  */
@@ -1234,10 +1234,10 @@ export function composeAiredScript(o: RoundOutcome): { script: string; note: str
   };
 }
 
-export class VtuberModule implements IOModule {
+export class VtuberModule implements World {
   readonly id = 'vtuber';
 
-  private host: IOModuleHost | null = null;
+  private host: WorldHost | null = null;
   /** host 在 start() 才挂上;构造期就要日志的部件拿这一份,调用刻现取 host.log */
   private readonly log: Logger = forwardLogger(() => this.host?.log);
   private readonly timezone: string;
@@ -1481,7 +1481,7 @@ export class VtuberModule implements IOModule {
       // 进程内与 proxy 使用相同的提示文档声明。
       promptDocs: [
         {
-          key: 'io.vtuber.envPrompt',
+          key: 'worlds.vtuber.envPrompt',
           title: 'VTuber · 环境提示词',
           description: '人物设定、动作与嗓音词表、演出范例、说话节奏。',
           path: ENV_PROMPT_FILE,
@@ -1497,7 +1497,7 @@ export class VtuberModule implements IOModule {
     };
   }
 
-  /** 通道的运行日志 logger,按通道缓存(区域 = io.vtuber.<LANE_AREA[lane]>) */
+  /** 通道的运行日志 logger,按通道缓存(区域 = worlds.vtuber.<LANE_AREA[lane]>) */
   private readonly laneLogs = new Map<string, Logger>();
 
   /**
@@ -1587,7 +1587,7 @@ export class VtuberModule implements IOModule {
   private pushPerfFault(text: string): void {
     void this.host
       ?.pushEvent(
-        { ts: nowIso(this.timezone), source: this.id, type: 'io.note', origin: 'internal', text },
+        { ts: nowIso(this.timezone), source: this.id, type: 'worlds.note', origin: 'internal', text },
         { trigger: 'flush' },
       )
       .catch((e) => this.host?.log.warn('演出故障事件投递失败', { err: String(e) }));
@@ -2462,7 +2462,7 @@ export class VtuberModule implements IOModule {
     };
   }
 
-  async start(host: IOModuleHost): Promise<void> {
+  async start(host: WorldHost): Promise<void> {
     this.host = host;
     await this.stream.start(host.log);
     this.streamUp = true;
@@ -2969,10 +2969,10 @@ export class VtuberModule implements IOModule {
   }
 
   /**
-   * 投递静默提醒并附上 harness 在该安静段内的调用阻塞次数。提醒标记 ephemeral，避免读过后持续累积在上下文。
+   * 投递静默提醒并附上 core 在该安静段内的调用阻塞次数。提醒标记 ephemeral，避免读过后持续累积在上下文。
    */
   private async pushSilenceRemind(
-    host: IOModuleHost,
+    host: WorldHost,
     tier: number,
     totalSec: number,
     windowMs: number,
@@ -2994,7 +2994,7 @@ export class VtuberModule implements IOModule {
       {
         ts: nowIso(this.timezone),
         source: this.id,
-        type: 'io.note',
+        type: 'worlds.note',
         origin: 'internal',
         ephemeral: true,
         text: silenceReminder(tier, totalSec, this.silenceLinesOpt?.()[tier], stalls),
@@ -3124,7 +3124,7 @@ export class VtuberModule implements IOModule {
         {
           ts: nowIso(this.timezone),
           source: this.id,
-          type: 'io.note',
+          type: 'worlds.note',
           origin: 'internal',
           text:
             `[演出] 上一轮你写进直接输出的内容没有发给观众:\n「${quoted}」\n` +

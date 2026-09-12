@@ -30,7 +30,7 @@ export interface FxEntry {
 }
 
 export interface ModelProfile {
-  /** 档案 id,也是配置 `io.vtuber.modelProfile` 的取值 */
+  /** 档案 id,也是配置 `worlds.vtuber.modelProfile` 的取值 */
   id: string;
   /** 控制台显示名 */
   label: string;

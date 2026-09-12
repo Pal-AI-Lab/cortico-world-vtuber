@@ -6,7 +6,7 @@
     bots/<bot>/vtuber-pack/    这个人格的演出资产(进版本控制)
     这一份                     两层都没有时的范例
 
-`io.vtuber.packDir` 填了绝对路径就压过这三层(包在仓库外时用它)。
+`worlds.vtuber.packDir` 填了绝对路径就压过这三层(包在仓库外时用它)。
 
 演出包对所有 Live2D 模型相同;模型差异只在模型目录的 `cortico.profile.json`
 (见 [`../../models/LIVE2D-ADAPTATION.md`](../../models/LIVE2D-ADAPTATION.md))——那是**档案**,不是包。

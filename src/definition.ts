@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { IOModuleDefinition } from 'cortico/modules.ts';
+import type { WorldDefinition } from 'cortico/world.ts';
 import {
   OVERLAY_CONFIG_DEFAULTS,
   TTS_PROFILE_DEFAULTS,
@@ -12,7 +12,7 @@ import {
 import { VtuberModuleProxy } from './proxy.ts';
 import { playbackConfigOptions } from './device-audio.ts';
 
-/** config.json 的 `io.vtuber` 节。 */
+/** config.json 的 `worlds.vtuber` 节。 */
 export interface VtuberConfigSection {
   enabled: boolean;
   vtsWsUrl: string;
@@ -53,7 +53,7 @@ export interface VtuberConfigSection {
   overlay: OverlayConfig;
 }
 
-export const VTUBER: IOModuleDefinition<VtuberConfigSection> = {
+export const VTUBER: WorldDefinition<VtuberConfigSection> = {
   id: 'vtuber',
   label: 'VTuber 演出',
   defaults: () => ({
