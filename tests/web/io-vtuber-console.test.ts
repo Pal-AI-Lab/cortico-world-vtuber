@@ -8,10 +8,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderTemplate, templateVarNames } from 'cortico/core/template.ts';
-import { VTUBER_PANEL_DECLS } from '../../src/module.ts';
-import { VtuberModuleProxy } from '../../src/proxy.ts';
+import { VTUBER_PANEL_DECLS } from '../../src/world.ts';
+import { VtuberWorldProxy } from '../../src/proxy.ts';
 import { ioPageContribution } from 'cortico/bot.ts';
-import type { ModulePanelDecl } from 'cortico/core/types.ts';
+import type { WorldPanelDecl } from 'cortico/core/types.ts';
 import { fixtureProfileJson, writeProfileDir } from '../vtuber/helpers.ts';
 
 /**
@@ -25,17 +25,17 @@ const CONSOLE_DIR = '../../src/console';
 const PANEL_IDS = ['mount', 'model', 'overlay', 'clips', 'tts', 'align', 'log', 'diag'];
 
 /** 不 start 就不会 fork 子进程:这一套断言全在主进程这一侧。 */
-const proxy = (opts: ConstructorParameters<typeof VtuberModuleProxy>[0] = {}): VtuberModuleProxy =>
-  new VtuberModuleProxy(opts);
+const proxy = (opts: ConstructorParameters<typeof VtuberWorldProxy>[0] = {}): VtuberWorldProxy =>
+  new VtuberWorldProxy(opts);
 
-const contribution = (p: VtuberModuleProxy) =>
+const contribution = (p: VtuberWorldProxy) =>
   ioPageContribution('vtuber', 'VTuber 演出', undefined, p);
 
 // ---------------------------------------------------------------------------
 
 describe('VTuber 的面板声明', () => {
   it('八个面板都是局部 id + 真标题,不带 World 名前缀', () => {
-    const panels = (proxy().console().panels ?? []) as ModulePanelDecl[];
+    const panels = (proxy().console().panels ?? []) as WorldPanelDecl[];
     expect(panels.every((p) => typeof p === 'object')).toBe(true);
     expect(panels.map((p) => p.id)).toEqual(PANEL_IDS);
     expect(panels.map((p) => p.title)).toEqual([
@@ -51,7 +51,7 @@ describe('VTuber 的面板声明', () => {
   });
 
   it('每个面板都显式声明无副作用的 GET 方法', () => {
-    const panels = (proxy().console().panels ?? []) as ModulePanelDecl[];
+    const panels = (proxy().console().panels ?? []) as WorldPanelDecl[];
     expect(panels.every((panel) => Object.prototype.hasOwnProperty.call(panel, 'getMethods'))).toBe(true);
     expect(Object.fromEntries(panels.map((panel) => [panel.id, panel.getMethods]))).toEqual({
       mount: ['state', 'vtsState', 'ttsState'],
@@ -175,7 +175,7 @@ describe('面板 bundle', () => {
     expect(Object.keys(bundle.panels).sort()).toEqual([...PANEL_IDS].sort());
     for (const id of PANEL_IDS) expect(typeof bundle.panels[id].mount).toBe('function');
     // 两份清单同进同退:服务端声明的每一条都得有面板,反过来也一样
-    const declared = ((proxy().console().panels ?? []) as ModulePanelDecl[]).map((p) => p.id);
+    const declared = ((proxy().console().panels ?? []) as WorldPanelDecl[]).map((p) => p.id);
     expect(Object.keys(bundle.panels).sort()).toEqual([...declared].sort());
   });
 

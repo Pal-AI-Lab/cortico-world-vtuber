@@ -4,12 +4,12 @@ import type { WorldDefinition } from 'cortico/world.ts';
 import {
   OVERLAY_CONFIG_DEFAULTS,
   TTS_PROFILE_DEFAULTS,
-  VTUBER_MODULE_DEFAULTS,
-  VTUBER_MODULE_SECRET,
+  VTUBER_DEFAULTS,
+  VTUBER_SECRET,
   type OverlayConfig,
   type TtsProfile,
-} from './module.ts';
-import { VtuberModuleProxy } from './proxy.ts';
+} from './world.ts';
+import { VtuberWorldProxy } from './proxy.ts';
 import { playbackConfigOptions } from './device-audio.ts';
 
 /** config.json 的 `worlds.vtuber` 节。 */
@@ -57,7 +57,7 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
   id: 'vtuber',
   label: 'VTuber 演出',
   defaults: () => ({
-    ...structuredClone(VTUBER_MODULE_DEFAULTS as unknown as VtuberConfigSection),
+    ...structuredClone(VTUBER_DEFAULTS as unknown as VtuberConfigSection),
     ttsProfile: { ...TTS_PROFILE_DEFAULTS },
     overlay: structuredClone(OVERLAY_CONFIG_DEFAULTS),
   }),
@@ -72,7 +72,7 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
       || [join(ctx.botDir, 'vtuber-pack'), join(ctx.packageDir, 'vtuber-pack')].find((d) => existsSync(d))
       || '';
     // The child process isolates 60 Hz avatar updates from synchronous work in the main loop.
-    return new VtuberModuleProxy({
+    return new VtuberWorldProxy({
       timezone: ctx.timezone,
       botName: ctx.botName,
       vtsWsUrl: cfg.vtsWsUrl,
@@ -87,7 +87,7 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
       packDir,
       audioDevice: () => cfg.audioDevice,
       audioMirrorSystem: () => cfg.audioMirrorSystem,
-      audioSecondary: () => cfg.audioSecondary ?? VTUBER_MODULE_DEFAULTS.audioSecondary,
+      audioSecondary: () => cfg.audioSecondary ?? VTUBER_DEFAULTS.audioSecondary,
       alignEnabled: () => cfg.alignEnabled,
       streamEnabled: () => cfg.streamEnabled,
       speechCapSec: () => cfg.speechCapSec,
@@ -109,8 +109,8 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
       onTtsProfile: (profile) => ctx.persist({ ttsProfile: profile }),
       overlay: cfg.overlay,
       onOverlayConfig: (config) => ctx.persist({ overlay: config }),
-      vtsAuthToken: ctx.secret(VTUBER_MODULE_SECRET),
-      onVtsToken: (token) => ctx.storeSecret(VTUBER_MODULE_SECRET, token),
+      vtsAuthToken: ctx.secret(VTUBER_SECRET),
+      onVtsToken: (token) => ctx.storeSecret(VTUBER_SECRET, token),
     });
   },
 };

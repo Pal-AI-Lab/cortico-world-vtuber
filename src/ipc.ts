@@ -14,8 +14,8 @@ import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
  */
 import type { LogNote } from 'cortico/core/ipcLogger.ts';
 import type { EventEnvelope, LLMUsage, PushOptions } from 'cortico/core/types.ts';
-import type { ModuleConsoleDecl } from 'cortico/core/types.ts';
-import type { OverlayConfig, TtsProfile, VtuberDecaySec } from './module.ts';
+import type { WorldConsoleDecl } from 'cortico/core/types.ts';
+import type { OverlayConfig, TtsProfile, VtuberDecaySec } from './world.ts';
 
 /**
  * x-hot 配置的取值快照。键缺席 = 装配层没提供那个 getter(子进程用 World 默认值);
@@ -106,7 +106,7 @@ export type EngineCast =
 export type EngineNote =
   | LogNote
   | { kind: 'usage'; usage: LLMUsage; opts?: Parameters<import('cortico/core/types.ts').WorldHost['reportUsage']>[1] }
-  | { kind: 'status'; line: string | null; live: boolean; decl: Pick<ModuleConsoleDecl, 'lamps' | 'badges' | 'links'> }
+  | { kind: 'status'; line: string | null; live: boolean; decl: Pick<WorldConsoleDecl, 'lamps' | 'badges' | 'links'> }
   | { kind: 'tts-profile'; profile: TtsProfile }
   | { kind: 'overlay-config'; config: OverlayConfig }
   | { kind: 'vts-token'; token: string };

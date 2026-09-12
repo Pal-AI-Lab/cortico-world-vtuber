@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { WorldHost } from 'cortico/core/types.ts';
 import type { EngineRequest } from '../../src/ipc.ts';
-import { VtuberModuleProxy } from '../../src/proxy.ts';
+import { VtuberWorldProxy } from '../../src/proxy.ts';
 
 afterEach(() => vi.useRealTimers());
 
@@ -9,7 +9,7 @@ it('引擎已接收请求但不回执时记故障并取消等待，不重发演�
   vi.useFakeTimers();
   const sent: Array<{ t: string }> = [];
   const errors: Array<{ message: string; data: unknown }> = [];
-  const proxy = new VtuberModuleProxy({});
+  const proxy = new VtuberWorldProxy({});
   const inner = proxy as unknown as {
     child: { connected: boolean; pid: number; send(message: { t: string }): void };
     host: WorldHost;

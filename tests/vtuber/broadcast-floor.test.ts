@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { EventEnvelope, EventStoreReader } from 'cortico/core/types.ts';
-import { broadcastFloorMs } from '../../src/module.ts';
+import { broadcastFloorMs } from '../../src/world.ts';
 
 /** cursor 从 1 起的假事件库 */
 function storeOf(events: Array<{ source: string; tsOffsetMs: number }>, now: number): EventStoreReader {

@@ -80,7 +80,7 @@ export const modelPanel: ConsolePanel = {
           recommendedDir: 'C:/Program Files (x86)/Steam/steamapps/common/VTube Studio/VTube Studio_Data/StreamingAssets/Live2DModels',
         }).then(async (selected) => {
           if (!selected || ctx.signal.aborted) return;
-          await ctx.setConfig('module:vtuber', { 'worlds.vtuber.live2dDir': selected });
+          await ctx.setConfig('world:vtuber', { 'worlds.vtuber.live2dDir': selected });
           live2dPath.textContent = selected;
           say('模型目录已保存');
           await refresh();
@@ -99,7 +99,7 @@ export const modelPanel: ConsolePanel = {
           currentPath: current?.packDir || undefined,
         }).then(async (selected) => {
           if (!selected || ctx.signal.aborted) return;
-          await ctx.setConfig('module:vtuber', { 'worlds.vtuber.packDir': selected });
+          await ctx.setConfig('world:vtuber', { 'worlds.vtuber.packDir': selected });
           packPath.textContent = selected;
           say('演出包目录已保存,重启后生效');
         }).catch((err: unknown) => {

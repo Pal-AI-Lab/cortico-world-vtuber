@@ -8,14 +8,14 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { envPromptDocOf, renderModuleEnvPrompt } from 'cortico/core/prefix.ts';
+import { envPromptDocOf, renderWorldEnvPrompt } from 'cortico/core/prefix.ts';
 import { templateVarNames } from 'cortico/core/template.ts';
 import type { World } from 'cortico/core/types.ts';
-import { VtuberModuleProxy } from '../src/proxy.ts';
+import { VtuberWorldProxy } from '../src/proxy.ts';
 
 /** 只构造 World，不启动外部连接。 */
 const MODULES: Array<() => World> = [
-  () => new VtuberModuleProxy(),
+  () => new VtuberWorldProxy(),
 ];
 
 describe('环境提示词模板契约', () => {
@@ -40,7 +40,7 @@ describe('环境提示词模板契约', () => {
   it.each(MODULES.map((make) => [make().id, make] as const))(
     '%s:渲染结果里不留没填上的占位符',
     async (_id, make) => {
-      const { text } = await renderModuleEnvPrompt(make());
+      const { text } = await renderWorldEnvPrompt(make());
       expect(text).not.toMatch(/\{\{/);
     },
   );
@@ -61,7 +61,7 @@ describe('环境提示词模板契约', () => {
       stop: async () => {},
     };
     try {
-      const out = await renderModuleEnvPrompt(mod);
+      const out = await renderWorldEnvPrompt(mod);
       expect(out.text).toBe('');
       expect(out.sourceKey).toBeUndefined();
     } finally {

@@ -66,7 +66,7 @@ afterEach(() => {
 });
 
 describe('VTuber 模型页的 Live2D 目录', () => {
-  it('选择目录后通过 provider context 写入 module:vtuber，并立即更新回显', async () => {
+  it('选择目录后通过 provider context 写入 world:vtuber，并立即更新回显', async () => {
     const selected = 'D:\\Cortico-Resources\\live2d\\Corti';
     const state = {
       configured: 'auto',
@@ -128,7 +128,7 @@ describe('VTuber 模型页的 Live2D 目录', () => {
       recommendedDir: 'C:/Program Files (x86)/Steam/steamapps/common/VTube Studio/VTube Studio_Data/StreamingAssets/Live2DModels',
     });
     expect(calls.find((call) => call.url === '/api/config')?.body).toEqual({
-      group: 'module:vtuber',
+      group: 'world:vtuber',
       values: { 'worlds.vtuber.live2dDir': selected },
     });
     expect(field(root, '模型目录').textContent).toContain(selected);

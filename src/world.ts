@@ -1,6 +1,6 @@
 import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
 /**
- * VtuberModule — 直播演出 World。
+ * VtuberWorld — 直播演出 World。
  *
  * 分层(设计 vtuber_performance_module_design.md):
  * - L1 暴露台本演出与打断工具;
@@ -20,8 +20,8 @@ import type {
   World,
   WorldHost,
   Logger,
-  ModuleConsoleDecl,
-  ModulePanelDecl,
+  WorldConsoleDecl,
+  WorldPanelDecl,
   OutputTap,
   ToolDef,
 } from 'cortico/core/types.ts';
@@ -128,7 +128,7 @@ export const OVERLAY_CONFIG_DEFAULTS: OverlayConfig = {
   },
 };
 
-export const VTUBER_MODULE_DEFAULTS = {
+export const VTUBER_DEFAULTS = {
   // enabled 由Persona的装配层显式开启。
   enabled: false,
   vtsWsUrl: 'ws://127.0.0.1:8001',
@@ -257,7 +257,7 @@ export interface VtuberDecaySec {
   emotion: [number, number];
 }
 
-export const VTUBER_MODULE_SECRET = 'VTS_AUTH_TOKEN';
+export const VTUBER_SECRET = 'VTS_AUTH_TOKEN';
 
 /** VoxCPM2 声线档案:参考音频 + 生成参数。控制台改,经装配层回写 config.json。 */
 export interface TtsProfile {
@@ -323,8 +323,8 @@ function clampOverlay(patch: Partial<OverlayConfig> | undefined, base: OverlayCo
 }
 
 export const VTUBER_CONFIG_GROUP: ConfigGroup = {
-  id: 'module:vtuber',
-  owner: 'module:vtuber',
+  id: 'world:vtuber',
+  owner: 'world:vtuber',
   schema: {
     type: 'object',
     title: 'VTuber · 演出',
@@ -645,7 +645,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
  * 键,控制台就渲染一张"面板产物缺这个面板"的错误卡;反过来 bundle 写了却不声明,面板在
  * 导航里根本够不着。九条与那份键表逐条对齐。
  */
-export const VTUBER_PANEL_DECLS: readonly ModulePanelDecl[] = [
+export const VTUBER_PANEL_DECLS: readonly WorldPanelDecl[] = [
   {
     id: 'mount',
     title: '挂载',
@@ -696,7 +696,7 @@ export const VTUBER_PANEL_DECLS: readonly ModulePanelDecl[] = [
   },
 ];
 
-export interface VtuberModuleOptions {
+export interface VtuberWorldOptions {
   timezone?: string;
   botName?: string;
   vtsWsUrl?: string;
@@ -1234,7 +1234,7 @@ export function composeAiredScript(o: RoundOutcome): { script: string; note: str
   };
 }
 
-export class VtuberModule implements World {
+export class VtuberWorld implements World {
   readonly id = 'vtuber';
 
   private host: WorldHost | null = null;
@@ -1339,12 +1339,12 @@ export class VtuberModule implements World {
 
   /** 杂谈/游戏模式的弹幕攒批(听弹幕模式逐条即时,不进这里) */
 
-  constructor(opts: VtuberModuleOptions = {}) {
+  constructor(opts: VtuberWorldOptions = {}) {
     this.timezone = opts.timezone ?? 'Asia/Shanghai';
     this.botName = opts.botName ?? 'bot';
     this.decaySec = opts.decaySec;
     this.vts = new VtsClient({
-      url: opts.vtsWsUrl ?? VTUBER_MODULE_DEFAULTS.vtsWsUrl,
+      url: opts.vtsWsUrl ?? VTUBER_DEFAULTS.vtsWsUrl,
       authToken: opts.vtsAuthToken,
       onToken: opts.onVtsToken,
       onAuthRejected: (rejected) => this.noteVtsAuthRejected(rejected),
@@ -1357,7 +1357,7 @@ export class VtuberModule implements World {
     this.overlayCfg = clampOverlay(opts.overlay, OVERLAY_CONFIG_DEFAULTS);
     this.onOverlayConfig = opts.onOverlayConfig;
     this.stream = new PerformStream({
-      preferredPort: opts.streamPort ?? VTUBER_MODULE_DEFAULTS.streamPort,
+      preferredPort: opts.streamPort ?? VTUBER_DEFAULTS.streamPort,
       snapshot: () => ({
         status: this.statusLine(),
         // 初始快照包含当前 overlay 配置;后续变更通过 overlay.config 事件发送。
@@ -1365,7 +1365,7 @@ export class VtuberModule implements World {
       }),
       onDanmakuIn: (text, from) => this.onDanmakuIn(text, from),
     });
-    const ttsUrl = opts.ttsUrl ?? VTUBER_MODULE_DEFAULTS.ttsUrl;
+    const ttsUrl = opts.ttsUrl ?? VTUBER_DEFAULTS.ttsUrl;
     this.ttsUrl = ttsUrl;
     this.ttsProfile = this.clampProfile({ ...TTS_PROFILE_DEFAULTS, ...opts.ttsProfile });
     this.onTtsProfile = opts.onTtsProfile;
@@ -1406,7 +1406,7 @@ export class VtuberModule implements World {
     this.modelProfileOpt = opts.modelProfile;
     this.packDir = opts.packDir?.trim() || EXAMPLE_PACK_DIR;
     this.pack = loadPack(this.packDir);
-    this.registry = loadProfiles(this.live2dDirOpt?.() ?? VTUBER_MODULE_DEFAULTS.live2dDir, { paramIds: this.pack.paramIds, fxIds: this.pack.fxIds });
+    this.registry = loadProfiles(this.live2dDirOpt?.() ?? VTUBER_DEFAULTS.live2dDir, { paramIds: this.pack.paramIds, fxIds: this.pack.fxIds });
     // 眼睑所有权按模型档案定:idle 不眨眼的模型由混音台全程接管(见 Mixer.applyBlink)
     this.mixer = new Mixer({ pack: () => this.pack, idleBlinks: () => this.resolvedProfile().profile.idleBlinks ?? false });
     this.diagDir = opts.diagDir ?? null;
@@ -1440,7 +1440,7 @@ export class VtuberModule implements World {
     return { 'vtuber.vocab': vocabTableRows(this.pack) };
   }
 
-  console(): ModuleConsoleDecl {
+  console(): WorldConsoleDecl {
     const vtsTone = this.vtsOk === true ? 'on' : this.vtsOk === false ? 'off' : 'plain';
     const ttsTone = this.ttsOk === true ? 'on' : this.ttsOk === false ? 'off' : 'plain';
     // 三条链路各一颗:形象(VTS)、声音(TTS)、画面(演出流)。三条各坏各的——
@@ -1612,7 +1612,7 @@ export class VtuberModule implements World {
   }
 
   private alignOn(): boolean {
-    return this.alignEnabled?.() ?? VTUBER_MODULE_DEFAULTS.alignEnabled;
+    return this.alignEnabled?.() ?? VTUBER_DEFAULTS.alignEnabled;
   }
 
   /**
@@ -1932,7 +1932,7 @@ export class VtuberModule implements World {
         this.reloadRegistry();
         const r = this.resolvedProfile();
         return {
-          configured: this.modelProfileOpt?.() ?? VTUBER_MODULE_DEFAULTS.modelProfile,
+          configured: this.modelProfileOpt?.() ?? VTUBER_DEFAULTS.modelProfile,
           activeId: r.profile.id,
           activeLabel: r.profile.label,
           how: r.how,
@@ -2157,14 +2157,14 @@ export class VtuberModule implements World {
   private resolvedProfile(): ProfileResolution {
     return resolveProfile(
       this.registry,
-      this.modelProfileOpt?.() ?? VTUBER_MODULE_DEFAULTS.modelProfile,
+      this.modelProfileOpt?.() ?? VTUBER_DEFAULTS.modelProfile,
       this.vtsModelName,
     );
   }
 
   /** 重扫 live2dDir 下的档案;目录是热配置,档案文件也可能刚被改过 */
   private reloadRegistry(): void {
-    this.registry = loadProfiles(this.live2dDirOpt?.() ?? VTUBER_MODULE_DEFAULTS.live2dDir, { paramIds: this.pack.paramIds, fxIds: this.pack.fxIds });
+    this.registry = loadProfiles(this.live2dDirOpt?.() ?? VTUBER_DEFAULTS.live2dDir, { paramIds: this.pack.paramIds, fxIds: this.pack.fxIds });
   }
 
   /** 清除残留反应表情，并保留当前模型档案声明的装扮与道具。 */
@@ -2491,20 +2491,20 @@ export class VtuberModule implements World {
         alignPcm: (pcm, sampleRate, units) => this.alignPcmPrefix(pcm, sampleRate, units),
       },
       streamEnabled: () =>
-        (this.streamEnabledOpt?.() ?? VTUBER_MODULE_DEFAULTS.streamEnabled) && this.streamCapable(),
+        (this.streamEnabledOpt?.() ?? VTUBER_DEFAULTS.streamEnabled) && this.streamCapable(),
       alignEnabled: () => this.alignOn(),
       speechRate: () => this.speechRateHint(),
       yieldWindowMs: () => {
         const v = this.yieldWindowMsOpt?.();
         return typeof v === 'number' && Number.isFinite(v)
           ? Math.min(2000, Math.max(0, Math.round(v)))
-          : VTUBER_MODULE_DEFAULTS.yieldWindowMs;
+          : VTUBER_DEFAULTS.yieldWindowMs;
       },
       yieldFadeMs: () => {
         const v = this.yieldFadeMsOpt?.();
         return typeof v === 'number' && Number.isFinite(v)
           ? Math.min(1000, Math.max(30, Math.round(v)))
-          : VTUBER_MODULE_DEFAULTS.yieldFadeMs;
+          : VTUBER_DEFAULTS.yieldFadeMs;
       },
       audio: this.audio,
       mixer: this.mixer,
@@ -2623,7 +2623,7 @@ export class VtuberModule implements World {
   private broadcastFloor(): number {
     const host = this.host;
     if (!host) return 0;
-    const delaySec = this.obsDelaySecOpt?.() ?? VTUBER_MODULE_DEFAULTS.obsDelaySec;
+    const delaySec = this.obsDelaySecOpt?.() ?? VTUBER_DEFAULTS.obsDelaySec;
     return broadcastFloorMs(host.store, this.delayedSourcesOpt?.() ?? [], delaySec * 1000, Date.now());
   }
 
@@ -2807,8 +2807,8 @@ export class VtuberModule implements World {
 
   /** 同轮演出封顶(可调,x-hot);垃圾值回落默认。取值依据见 SpeechDecision 上方注释。 */
   private maxActRounds(): number {
-    const n = this.maxActRoundsPerTurnOpt?.() ?? VTUBER_MODULE_DEFAULTS.maxActRoundsPerTurn;
-    return Math.min(100, Math.max(1, Number.isFinite(n) ? Math.floor(n) : VTUBER_MODULE_DEFAULTS.maxActRoundsPerTurn));
+    const n = this.maxActRoundsPerTurnOpt?.() ?? VTUBER_DEFAULTS.maxActRoundsPerTurn;
+    return Math.min(100, Math.max(1, Number.isFinite(n) ? Math.floor(n) : VTUBER_DEFAULTS.maxActRoundsPerTurn));
   }
 
   private speechProfileKey(): string {
@@ -2892,8 +2892,8 @@ export class VtuberModule implements World {
   }
 
   private speechCapMs(): number {
-    const sec = this.speechCapSecOpt?.() ?? VTUBER_MODULE_DEFAULTS.speechCapSec;
-    return Math.min(120, Math.max(3, Number.isFinite(sec) ? sec : VTUBER_MODULE_DEFAULTS.speechCapSec)) * 1000;
+    const sec = this.speechCapSecOpt?.() ?? VTUBER_DEFAULTS.speechCapSec;
+    return Math.min(120, Math.max(3, Number.isFinite(sec) ? sec : VTUBER_DEFAULTS.speechCapSec)) * 1000;
   }
 
   /** 禁播词表(| 分隔;装配层可注入 bot 专有条目,如交接占位符);空串条目剔除 */
@@ -2913,8 +2913,8 @@ export class VtuberModule implements World {
   }
 
   private silenceRemindMs(): number {
-    const sec = this.silenceRemindSecOpt?.() ?? VTUBER_MODULE_DEFAULTS.silenceRemindSec;
-    return Math.min(300, Math.max(1, Number.isFinite(sec) ? sec : VTUBER_MODULE_DEFAULTS.silenceRemindSec)) * 1000;
+    const sec = this.silenceRemindSecOpt?.() ?? VTUBER_DEFAULTS.silenceRemindSec;
+    return Math.min(300, Math.max(1, Number.isFinite(sec) ? sec : VTUBER_DEFAULTS.silenceRemindSec)) * 1000;
   }
 
   private silenceTier = 0;
@@ -2927,9 +2927,9 @@ export class VtuberModule implements World {
     const clampSec = (v: number | undefined, dft: number): number =>
       Math.min(600, Math.max(0, Number.isFinite(v as number) ? (v as number) : dft));
     const plan = [this.silenceRemindMs()];
-    const t2 = clampSec(this.silenceRemind2SecOpt?.(), VTUBER_MODULE_DEFAULTS.silenceRemind2Sec) * 1000;
+    const t2 = clampSec(this.silenceRemind2SecOpt?.(), VTUBER_DEFAULTS.silenceRemind2Sec) * 1000;
     if (t2 > plan[0]) plan.push(t2);
-    const t3 = clampSec(this.silenceRemind3SecOpt?.(), VTUBER_MODULE_DEFAULTS.silenceRemind3Sec) * 1000;
+    const t3 = clampSec(this.silenceRemind3SecOpt?.(), VTUBER_DEFAULTS.silenceRemind3Sec) * 1000;
     if (t3 > plan[plan.length - 1]) plan.push(t3);
     return plan;
   }
@@ -3110,7 +3110,7 @@ export class VtuberModule implements World {
     if (!this.contentLeaked(content)) return;
     // 内部唤醒会再次进入 agent 上下文;重复泄漏提醒按冷却节流以避免反馈循环。
     const now = Date.now();
-    if (now - this.lastLeakRemindAt < VtuberModule.LEAK_REMIND_COOLDOWN_MS) {
+    if (now - this.lastLeakRemindAt < VtuberWorld.LEAK_REMIND_COOLDOWN_MS) {
       this.tracePerf('提醒', '直接输出仍含演出标记,冷却中不重复提醒');
       return;
     }

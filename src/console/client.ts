@@ -34,7 +34,7 @@ import { logPanel } from './log.ts';
 import { diagPanel } from './diag.ts';
 
 // ---------------------------------------------------------------------------
-// 共享类型:服务端 `VtuberModuleProxy.invokePanel` 各方法的返回形状
+// 共享类型:服务端 `VtuberWorldProxy.invokePanel` 各方法的返回形状
 // ---------------------------------------------------------------------------
 
 /** `mount.vtsState`(也是 `mount.state` 里的 `vts` 一支) */
@@ -450,7 +450,7 @@ export function delay(ctx: ConsolePanelContext, ms: number): Promise<boolean> {
 const bundle: ConsoleClientBundle = {
   /**
    * 键是**局部** panel id,与服务端 `console().panels[].id` 一一对应
-   * (`src/module.ts` 的 `VTUBER_PANEL_DECLS`)。
+   * (`src/world.ts` 的 `VTUBER_PANEL_DECLS`)。
    *
    * 声明与面板 bundle**同进同退**:这里少一个键,控制台就给一张"面板产物缺这个面板"的错误卡;
    * 那边少一条声明,面板就在导航里够不着。八个面板两处必须逐条对上——

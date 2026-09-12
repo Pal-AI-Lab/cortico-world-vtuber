@@ -1,17 +1,17 @@
 /**
  * 演出引擎子进程入口(经 proxy.ts fork,不手动运行)。
  *
- * VtuberModule 在子进程运行。日志和用量使用单向通知，需回执的宿主调用使用
+ * VtuberWorld 在子进程运行。日志和用量使用单向通知，需回执的宿主调用使用
  * hreq/hrep。事件库仅重放播出延迟计算所需的 cursor、ts 与 source；range/grep
  * 返回空结果。
  */
 import { makeIpcLogger } from 'cortico/core/ipcLogger.ts';
 import { withAnchors } from 'cortico/core/logContext.ts';
 import {
-  VTUBER_MODULE_DEFAULTS,
-  VtuberModule,
-  type VtuberModuleOptions,
-} from './module.ts';
+  VTUBER_DEFAULTS,
+  VtuberWorld,
+  type VtuberWorldOptions,
+} from './world.ts';
 import type {
   ChildToMain,
   EngineConfigSnapshot,
@@ -134,7 +134,7 @@ const host: WorldHost = {
   log,
 };
 
-let mod: VtuberModule | null = null;
+let mod: VtuberWorld | null = null;
 let tap: OutputTap | null = null;
 let tools = new Map<string, ToolDef>();
 let panels: Record<EnginePanel, Record<string, unknown>> | null = null;
@@ -144,15 +144,15 @@ let lastStatus = '';
 let shuttingDown = false;
 
 /** init 快照里在场的键才建 getter:键缺席 = 装配层没提供,World 用自己的默认 */
-function configGetters(initial: EngineConfigSnapshot): Partial<VtuberModuleOptions> {
+function configGetters(initial: EngineConfigSnapshot): Partial<VtuberWorldOptions> {
   snap = initial;
-  const out: Partial<VtuberModuleOptions> = {};
-  if ('audioDevice' in initial) out.audioDevice = () => snap.audioDevice ?? VTUBER_MODULE_DEFAULTS.audioDevice;
+  const out: Partial<VtuberWorldOptions> = {};
+  if ('audioDevice' in initial) out.audioDevice = () => snap.audioDevice ?? VTUBER_DEFAULTS.audioDevice;
   if ('audioMirrorSystem' in initial) {
-    out.audioMirrorSystem = () => snap.audioMirrorSystem ?? VTUBER_MODULE_DEFAULTS.audioMirrorSystem;
+    out.audioMirrorSystem = () => snap.audioMirrorSystem ?? VTUBER_DEFAULTS.audioMirrorSystem;
   }
   if ('audioSecondary' in initial) {
-    out.audioSecondary = () => snap.audioSecondary ?? VTUBER_MODULE_DEFAULTS.audioSecondary;
+    out.audioSecondary = () => snap.audioSecondary ?? VTUBER_DEFAULTS.audioSecondary;
   }
   if ('alignEnabled' in initial) out.alignEnabled = () => snap.alignEnabled === true;
   if ('streamEnabled' in initial) out.streamEnabled = () => snap.streamEnabled === true;
@@ -167,26 +167,26 @@ function configGetters(initial: EngineConfigSnapshot): Partial<VtuberModuleOptio
   if ('decaySec' in initial) out.decaySec = () => snap.decaySec as NonNullable<EngineConfigSnapshot['decaySec']>;
   if ('modelProfile' in initial) out.modelProfile = () => snap.modelProfile as string;
   if ('ttsBaseLmFile' in initial) {
-    out.ttsBaseLmFile = () => snap.ttsBaseLmFile ?? VTUBER_MODULE_DEFAULTS.ttsBaseLmFile;
+    out.ttsBaseLmFile = () => snap.ttsBaseLmFile ?? VTUBER_DEFAULTS.ttsBaseLmFile;
   }
   if ('ttsAcousticFile' in initial) {
-    out.ttsAcousticFile = () => snap.ttsAcousticFile ?? VTUBER_MODULE_DEFAULTS.ttsAcousticFile;
+    out.ttsAcousticFile = () => snap.ttsAcousticFile ?? VTUBER_DEFAULTS.ttsAcousticFile;
   }
   if ('ttsAlignerLmFile' in initial) {
-    out.ttsAlignerLmFile = () => snap.ttsAlignerLmFile ?? VTUBER_MODULE_DEFAULTS.ttsAlignerLmFile;
+    out.ttsAlignerLmFile = () => snap.ttsAlignerLmFile ?? VTUBER_DEFAULTS.ttsAlignerLmFile;
   }
   if ('ttsAlignerAudioFile' in initial) {
-    out.ttsAlignerAudioFile = () => snap.ttsAlignerAudioFile ?? VTUBER_MODULE_DEFAULTS.ttsAlignerAudioFile;
+    out.ttsAlignerAudioFile = () => snap.ttsAlignerAudioFile ?? VTUBER_DEFAULTS.ttsAlignerAudioFile;
   }
   if ('ttsVoicesDir' in initial) {
-    out.ttsVoicesDir = () => snap.ttsVoicesDir ?? VTUBER_MODULE_DEFAULTS.ttsVoicesDir;
+    out.ttsVoicesDir = () => snap.ttsVoicesDir ?? VTUBER_DEFAULTS.ttsVoicesDir;
   }
-  if ('live2dDir' in initial) out.live2dDir = () => snap.live2dDir ?? VTUBER_MODULE_DEFAULTS.live2dDir;
+  if ('live2dDir' in initial) out.live2dDir = () => snap.live2dDir ?? VTUBER_DEFAULTS.live2dDir;
   return out;
 }
 
 async function handleInit(init: EngineInit): Promise<EngineReady> {
-  const m = new VtuberModule({
+  const m = new VtuberWorld({
     timezone: init.timezone,
     botName: init.botName,
     vtsWsUrl: init.vtsWsUrl,

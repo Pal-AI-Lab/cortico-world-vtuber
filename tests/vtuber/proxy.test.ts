@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { EventEnvelope, WorldHost, PushOptions } from 'cortico/core/types.ts';
 import { PassThrough } from 'node:stream';
-import { HANDOFF_NOTE } from '../../src/module.ts';
-import { attachStdio, VtuberModuleProxy } from '../../src/proxy.ts';
+import { HANDOFF_NOTE } from '../../src/world.ts';
+import { attachStdio, VtuberWorldProxy } from '../../src/proxy.ts';
 import { makeWav, recordingLogger, type LogLine } from './helpers.ts';
 
 class FakeHost implements WorldHost {
@@ -74,12 +74,12 @@ function waitFor(cond: () => boolean, timeoutMs = 8000): Promise<void> {
   });
 }
 
-describe('VtuberModuleProxy(演出引擎子进程)', () => {
+describe('VtuberWorldProxy(演出引擎子进程)', () => {
   let host: FakeHost;
   let tts: Server;
   let ttsUrl: string;
   let serverDir: string;
-  let proxy: VtuberModuleProxy;
+  let proxy: VtuberWorldProxy;
   let live2dDir = '';
 
   beforeAll(async () => {
@@ -98,7 +98,7 @@ describe('VtuberModuleProxy(演出引擎子进程)', () => {
     await new Promise<void>((r) => tts.listen(0, '127.0.0.1', () => r()));
     const ttsPort = (tts.address() as { port: number }).port;
     ttsUrl = `http://127.0.0.1:${ttsPort}`;
-    proxy = new VtuberModuleProxy({
+    proxy = new VtuberWorldProxy({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -268,7 +268,7 @@ describe('VtuberModuleProxy(演出引擎子进程)', () => {
 
   it('shutdown 一经接收就拒绝后续面板 RPC', async () => {
     const isolatedHost = new FakeHost();
-    const isolated = new VtuberModuleProxy({
+    const isolated = new VtuberWorldProxy({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -306,9 +306,9 @@ describe('演出引擎子进程退出的告知', () => {
     restartTimer: ReturnType<typeof setTimeout> | null;
   }
 
-  function makeIdleProxy(): { proxy: VtuberModuleProxy; host: FakeHost; inner: Internals } {
+  function makeIdleProxy(): { proxy: VtuberWorldProxy; host: FakeHost; inner: Internals } {
     const host = new FakeHost();
-    const proxy = new VtuberModuleProxy({
+    const proxy = new VtuberWorldProxy({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',

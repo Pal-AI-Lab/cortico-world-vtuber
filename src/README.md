@@ -7,7 +7,7 @@
 
 | 层 | 文件 | 职责 |
 |---|---|---|
-| L1 | `module.ts` 工具 `vtuber_act(script)` | 决定演什么。只见词表与文本;词表来自 bot 的演出包(见「演出包」) |
+| L1 | `world.ts` 工具 `vtuber_act(script)` | 决定演什么。只见词表与文本;词表来自 bot 的演出包(见「演出包」) |
 | L2 | `parser.ts` `states.ts` `orchestrator.ts` | 决定何时。beat 队列、gap、锚点时间轴、状态机、反射层 |
 | L3 | `mixer.ts` + 演出包里的曲线(`pack.ts` 加载,`clips.ts` 只剩缓动与采样数学) | 决定参数值。60Hz 逐帧求值与仲裁 |
 | L4 | `backend.ts`(经 `vts-client.ts`)+ 模型档案(模型目录里的 `cortico.profile.json`,`models/` 负责发现与校验) | IR → VTS `InjectParameterData` 注入,无状态;语义量→实机输入量的换算表是模型目录里的数据 |
@@ -15,8 +15,8 @@
 
 ## 子进程隔离
 
-演出引擎跑在**自己的子进程**里:装配层挂的是 `proxy.ts` 的 `VtuberModuleProxy`,
-它 fork `child.ts`,真正的 `VtuberModule`(L1-L4 + TTS/对齐/声卡/演出流)整个在
+演出引擎跑在**自己的子进程**里:装配层挂的是 `proxy.ts` 的 `VtuberWorldProxy`,
+它 fork `child.ts`,真正的 `VtuberWorld`(L1-L4 + TTS/对齐/声卡/演出流)整个在
 子进程内运行。动机是帧率的尾延迟:60Hz 求值注入对同步阻塞极敏感,主进程上
 mineflayer 寻路(A* 同步计算)、VLM 回包、任务收尾这类 100-500ms 的大块会直接
 变成可见的参数跳变;隔离后有时钟的都在子进程,主进程只剩不带时钟的转发。

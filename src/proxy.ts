@@ -1,13 +1,13 @@
 /**
- * VtuberModuleProxy — 主进程侧的演出 World。
+ * VtuberWorldProxy — 主进程侧的演出 World。
  *
- * 真正的 VtuberModule 跑在子进程里(child.ts),这里只留不带时钟的部分:
+ * 真正的 VtuberWorld 跑在子进程里(child.ts),这里只留不带时钟的部分:
  * 工具面与 outputTap 的消息转发、心跳状态行与控制台徽标的缓存、事件信封与
  * x-hot 配置的采样推送、以及子进程生命周期(拉起/崩溃重启/停机)。
  * 60Hz 求值注入、TTS/对齐/声卡、演出流服务全在子进程,主进程事件循环上的
  * 同步大块从此打不断帧插入。
  *
- * 装配层用它替换 VtuberModule,选项形状不变:getter 型选项在这里定期采样成
+ * 装配层用它替换 VtuberWorld,选项形状不变:getter 型选项在这里定期采样成
  * 快照推给子进程,回写型回调(声线档案/overlay 配置/VTS token)由子进程的
  * 通知触发。工具回执、结果事件的语义与进程内版本一致;唯一的放宽是心跳
  * 状态行与徽标走 300ms 级的推送缓存。
@@ -21,7 +21,7 @@ import type {
   World,
   WorldHost,
   Logger,
-  ModuleConsoleDecl,
+  WorldConsoleDecl,
   OutputTap,
   ToolDef,
 } from 'cortico/core/types.ts';
@@ -34,7 +34,7 @@ import {
   PERFORM_PRESETS,
   SHUTDOWN_DRAIN_MAX_MS,
   VTUBER_CONFIG_GROUP,
-  VTUBER_MODULE_DEFAULTS,
+  VTUBER_DEFAULTS,
   VTUBER_PANEL_DECLS,
   VTUBER_TOOL_DECLS,
   type VtuberAlignConsole,
@@ -42,12 +42,12 @@ import {
   type VtuberDiagConsole,
   type VtuberLogConsole,
   HANDOFF_NOTE,
-  type VtuberModuleOptions,
+  type VtuberWorldOptions,
   type VtuberOverlayConsole,
   type VtuberPerformConsole,
   type VtuberTtsConsole,
   type VtuberVtsConsole,
-} from './module.ts';
+} from './world.ts';
 import type {
   ChildToMain,
   EngineCast,
@@ -118,7 +118,7 @@ export function attachStdio(
 }
 
 
-export class VtuberModuleProxy implements World {
+export class VtuberWorldProxy implements World {
   readonly id = 'vtuber';
 
   private host: WorldHost | null = null;
@@ -134,7 +134,7 @@ export class VtuberModuleProxy implements World {
   private statusArmedAt: number | null = null;
   /** 上一份状态行实际进上下文的时刻;STATUS_GAP_MS 节流的基准 */
   private lastStatusRenderAt = 0;
-  private declCache: Pick<ModuleConsoleDecl, 'lamps' | 'badges' | 'links'> = {};
+  private declCache: Pick<WorldConsoleDecl, 'lamps' | 'badges' | 'links'> = {};
   private lastConfigJson = '';
   private lastForwardedCursor = -1;
   private configTimer: ReturnType<typeof setInterval> | null = null;
@@ -147,7 +147,7 @@ export class VtuberModuleProxy implements World {
    */
   private readonly pack: PerformancePack;
 
-  constructor(private readonly opts: VtuberModuleOptions = {}) {
+  constructor(private readonly opts: VtuberWorldOptions = {}) {
     this.pack = loadPack(opts.packDir?.trim() || EXAMPLE_PACK_DIR);
   }
 
@@ -155,7 +155,7 @@ export class VtuberModuleProxy implements World {
     return { 'vtuber.vocab': vocabTableRows(this.pack) };
   }
 
-  console(): ModuleConsoleDecl {
+  console(): WorldConsoleDecl {
     return {
       // 子进程报上来之前只有一件事是确定的:引擎在不在。真 World 那排灯一到就盖掉这颗。
       lamps: this.declCache.lamps ?? [this.child
@@ -204,7 +204,7 @@ export class VtuberModuleProxy implements World {
    * 面板通用调用面；声线 wav 按 $binary 约定返回二进制。
    */
   private async invokePanel(panel: string, method: string, args: unknown[]): Promise<unknown> {
-    const allowed = VtuberModuleProxy.PANEL_METHODS[panel];
+    const allowed = VtuberWorldProxy.PANEL_METHODS[panel];
     if (!allowed) throw new Error(`未知面板: ${panel}`);
     if (!allowed.includes(method)) throw new Error(`未知面板方法: ${panel}.${method}`);
 
@@ -748,9 +748,9 @@ export class VtuberModuleProxy implements World {
     return {
       timezone: o.timezone ?? 'Asia/Shanghai',
       botName: o.botName ?? 'bot',
-      vtsWsUrl: o.vtsWsUrl ?? VTUBER_MODULE_DEFAULTS.vtsWsUrl,
-      streamPort: o.streamPort ?? VTUBER_MODULE_DEFAULTS.streamPort,
-      ttsUrl: o.ttsUrl ?? VTUBER_MODULE_DEFAULTS.ttsUrl,
+      vtsWsUrl: o.vtsWsUrl ?? VTUBER_DEFAULTS.vtsWsUrl,
+      streamPort: o.streamPort ?? VTUBER_DEFAULTS.streamPort,
+      ttsUrl: o.ttsUrl ?? VTUBER_DEFAULTS.ttsUrl,
       ttsServerDir: o.ttsServerDir ?? null,
       packDir: o.packDir ?? null,
       diagDir: o.diagDir ?? null,
@@ -768,7 +768,7 @@ export class VtuberModuleProxy implements World {
    */
   private sampleConfig(): EngineConfigSnapshot {
     const o = this.opts;
-    const d = VTUBER_MODULE_DEFAULTS;
+    const d = VTUBER_DEFAULTS;
     const s: EngineConfigSnapshot = {};
     if (o.audioDevice) s.audioDevice = o.audioDevice() ?? d.audioDevice;
     if (o.audioMirrorSystem) s.audioMirrorSystem = o.audioMirrorSystem() ?? d.audioMirrorSystem;

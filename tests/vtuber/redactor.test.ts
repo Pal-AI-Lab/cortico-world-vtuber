@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { StreamRedactor } from '../../src/module.ts';
+import { StreamRedactor } from '../../src/world.ts';
 
 /**
  * 禁播词在流式入口滤除，避免 handler 拒绝时音频已经输出；普通字符不得因过滤而无故滞留。

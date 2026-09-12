@@ -39,7 +39,7 @@ export interface DiagEvent {
 }
 
 /**
- * 埋点级别与运行日志一致；缺席时由 module.ts 的 LANE_TRACE 决定。info 用于可逐条阅读的状态迁移；warn 用于播出与预期不一致的情况，如拒播、无效单元表、截断、禁播词过滤或修订未命中。
+ * 埋点级别与运行日志一致；缺席时由 world.ts 的 LANE_TRACE 决定。info 用于可逐条阅读的状态迁移；warn 用于播出与预期不一致的情况，如拒播、无效单元表、截断、禁播词过滤或修订未命中。
  */
 export type TraceLevel = LogLevel;
 

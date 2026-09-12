@@ -11,12 +11,12 @@ import { findFfmpeg } from '../../src/audio-convert.ts';
 import {
   VTUBER_CONFIG_GROUP,
   VTS_STALL_STREAK,
-  VTUBER_MODULE_DEFAULTS,
+  VTUBER_DEFAULTS,
   VTUBER_TOOL_DECLS,
-  VtuberModule,
+  VtuberWorld,
   silenceReminder,
   type TtsProfile,
-} from '../../src/module.ts';
+} from '../../src/world.ts';
 import { EXAMPLE_PACK_DIR } from '../../src/pack.ts';
 import { decodeWav } from '../../src/tts.ts';
 import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfileDir, type LogLine } from './helpers.ts';
@@ -24,7 +24,7 @@ import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfile
 const ffmpegExe = findFfmpeg('');
 
 /** 面板声明里的局部 id(新式对象声明;字符串形态这个 World 已经不用了) */
-function panelIds(m: VtuberModule): string[] {
+function panelIds(m: VtuberWorld): string[] {
   return (m.console().panels ?? []).map((p) => (typeof p === 'string' ? p : p.id));
 }
 
@@ -203,9 +203,9 @@ function waitFor(cond: () => boolean, timeoutMs = 4000): Promise<void> {
   });
 }
 
-describe('VtuberModule 停机次序', () => {
+describe('VtuberWorld 停机次序', () => {
   it('先等当前台词排空,再停编排器', async () => {
-    const mod = new VtuberModule({
+    const mod = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -250,7 +250,7 @@ describe('VtuberModule 停机次序', () => {
    * 排空超时后 stop 丢弃剩余队列，须记录丢弃片数和时长。
    */
   it('关机排空超时:丢掉的片数与秒数记成「关机丢词」', async () => {
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -287,17 +287,17 @@ describe('VTuber 外置资源配置', () => {
       'live2dDir',
     ] as const;
     for (const key of keys) {
-      expect(VTUBER_MODULE_DEFAULTS[key]).toBe('');
+      expect(VTUBER_DEFAULTS[key]).toBe('');
       expect(VTUBER_CONFIG_GROUP.schema.properties[`worlds.vtuber.${key}`]?.['x-path']).toBeDefined();
     }
   });
 });
 
-describe('VtuberModule', () => {
+describe('VtuberWorld', () => {
   let host: FakeHost;
   let stage: StreamProbe;
   let tts: Server;
-  let mod: VtuberModule;
+  let mod: VtuberWorld;
   let serverDir: string;
   let ttsBodies: Array<Record<string, unknown>>;
   /** 假 VoxCPM2 这一轮要回的音频;null=默认那段 100ms 话音 */
@@ -333,7 +333,7 @@ describe('VtuberModule', () => {
     });
     await new Promise<void>((r) => tts.listen(0, '127.0.0.1', () => r()));
     const ttsPort = (tts.address() as { port: number }).port;
-    mod = new VtuberModule({
+    mod = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       // 不可达端口:VTS 缺席时演出仍走
@@ -494,7 +494,7 @@ describe('VtuberModule', () => {
 
   it('普通台本断流时不 flush 禁播词待定尾缀', async () => {
     await mod.stop();
-    mod = new VtuberModule({
+    mod = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -558,8 +558,8 @@ describe('VtuberModule', () => {
       audioDevice: () => 'none',
       diagDir,
     } as const;
-    const producer = new VtuberModule(common);
-    let restored: VtuberModule | null = null;
+    const producer = new VtuberWorld(common);
+    let restored: VtuberWorld | null = null;
     try {
       await producer.start(new FakeHost());
       const act = producer.tools().find((tool) => tool.name === 'vtuber_act');
@@ -572,7 +572,7 @@ describe('VtuberModule', () => {
       await waitFor(() => existsSync(rateLog) && readFileSync(rateLog, 'utf8').trim().length > 0);
       await producer.stop();
 
-      restored = new VtuberModule(common);
+      restored = new VtuberWorld(common);
       await restored.start(new FakeHost());
       const samples = (restored as unknown as { speechRateSamples: unknown[] }).speechRateSamples;
       expect(samples.length).toBeGreaterThan(0);
@@ -723,7 +723,7 @@ describe('VtuberModule', () => {
     // 落进 tally——那不是全零,摘要照发是对的。要测「平安无事」得先让 VTS 真连上。
     const vts = new FakeVts();
     await vts.start();
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
@@ -801,7 +801,7 @@ describe('VtuberModule', () => {
 
   it('同轮封顶数可调:maxActRoundsPerTurn 覆盖默认值', async () => {
     const ttsPort = (tts.address() as { port: number }).port;
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
@@ -1136,7 +1136,7 @@ describe('VtuberModule', () => {
     writeFileSync(join(voicesB, 'same.wav'), wavB);
     let voicesDir = voicesA;
     let live2dDir = 'D:\\VTubeStudio\\Models\\Corti';
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       streamPort: 0,
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
       ttsServerDir: serverDir,
@@ -1187,7 +1187,7 @@ describe('VtuberModule', () => {
   it('vtsConsole:连接→模型信息与表情复位;测试动作走注入链路;断开归零', async () => {
     const vts = new FakeVts();
     await vts.start();
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
@@ -1239,7 +1239,7 @@ describe('VtuberModule', () => {
 
     const live2d = mkdtempSync(join(tmpdir(), 'vtuber-live2d-'));
     writeProfileDir(live2d, 'FixtureModel', fixtureProfileJson());
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${port}`,
@@ -1282,7 +1282,7 @@ describe('VtuberModule', () => {
     writeProfileDir(live2d, 'FixtureModel', fixtureProfileJson());
     const vts = new FakeVts();
     await vts.start();
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
@@ -1365,7 +1365,7 @@ describe('VtuberModule', () => {
     writeFileSync(vocabFile, readFileSync(join(EXAMPLE_PACK_DIR, 'vocab.json')));
     writeFileSync(clipsFile, readFileSync(join(EXAMPLE_PACK_DIR, 'clips.json')));
     writeFileSync(join(packDir, 'params.json'), readFileSync(join(EXAMPLE_PACK_DIR, 'params.json')));
-    const mod2 = new VtuberModule({
+    const mod2 = new VtuberWorld({
       streamPort: 0,
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
       ttsServerDir: serverDir,
@@ -1543,11 +1543,11 @@ describe('VtuberModule', () => {
  * 验证播报队列的三个数、静默提醒及实际音频时序。
  * 测试 TTS 返回 3 秒音频并放宽积压上限,以覆盖队列从满到空的转换。
  */
-describe('VtuberModule 播报队列', () => {
+describe('VtuberWorld 播报队列', () => {
   let host: FakeHost;
   let tts: Server;
   let serverDir: string;
-  let mod: VtuberModule;
+  let mod: VtuberWorld;
 
   beforeEach(async () => {
     host = new FakeHost();
@@ -1562,7 +1562,7 @@ describe('VtuberModule 播报队列', () => {
       });
     });
     await new Promise<void>((r) => tts.listen(0, '127.0.0.1', () => r()));
-    mod = new VtuberModule({
+    mod = new VtuberWorld({
       botName: 'bot',
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
