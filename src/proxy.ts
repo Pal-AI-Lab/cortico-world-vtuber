@@ -401,7 +401,7 @@ export class VtuberWorldProxy implements World {
   }
 
   /** 交接后的开口提示直接由代理侧推,不过子进程:它不依赖引擎状态。 */
-  onHandoff(): void {
+  onHandoffEnded(): void {
     void this.host
       ?.pushEvent(
         { ts: new Date().toISOString(), source: this.id, type: 'worlds.note', origin: 'internal', text: HANDOFF_NOTE },

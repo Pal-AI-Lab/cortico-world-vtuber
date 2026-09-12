@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import type { Logger } from 'cortico/core/types.ts';
 import type { CutPlan } from './interrupt-fade.ts';
 import type { AudioSink, AudioStreamSession } from './orchestrator.ts';
-import type { TraceOpts } from './diagnostics.ts';
+import type { TraceOptions } from './diagnostics.ts';
 import { decodeWav, type TtsPiece } from './tts.ts';
 
 /**
@@ -297,7 +297,7 @@ interface Track {
 
 export class DeviceAudioSink implements AudioSink {
   private readonly now: () => number;
-  private readonly trace: (area: string, msg: string, opts?: TraceOpts) => void;
+  private readonly trace: (area: string, msg: string, opts?: TraceOptions) => void;
   /** 首次开设备时才载入;silent 模式全程为 null */
   private audify: AudifyModule | null = null;
   private audifyTried = false;
@@ -373,7 +373,7 @@ export class DeviceAudioSink implements AudioSink {
       device?: () => string;
       /** 副输出:`off` = 关,`default`/空 = 系统默认,其余按名字 */
       secondary?: () => string;
-      trace?: (area: string, msg: string, opts?: TraceOpts) => void;
+      trace?: (area: string, msg: string, opts?: TraceOptions) => void;
       now?: () => number;
       /** 测试注入:替换原生模块 */
       audifyOverride?: AudifyModule;

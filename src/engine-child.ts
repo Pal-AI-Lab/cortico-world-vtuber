@@ -5,7 +5,7 @@
  * hreq/hrep。事件库仅重放播出延迟计算所需的 cursor、ts 与 source；range/grep
  * 返回空结果。
  */
-import { makeIpcLogger } from 'cortico/core/ipcLogger.ts';
+import { createIpcLogger } from 'cortico/core/ipcLogger.ts';
 import { withAnchors } from 'cortico/core/logContext.ts';
 import {
   VTUBER_DEFAULTS,
@@ -39,7 +39,7 @@ function send(msg: ChildToMain): void {
   process.send(msg, () => {});
 }
 
-const makeLogger = (area: string): Logger => makeIpcLogger((note) => send({ t: 'note', note }), area);
+const makeLogger = (area: string): Logger => createIpcLogger((note) => send({ t: 'note', note }), area);
 
 /** Bounded event-store view over retained slim envelopes; older cursors are unavailable. */
 class SlimEventStore implements EventStoreReader {

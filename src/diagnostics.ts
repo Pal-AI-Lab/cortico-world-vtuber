@@ -44,7 +44,7 @@ export interface DiagEvent {
 export type TraceLevel = LogLevel;
 
 /** 埋点选项。事件环只收 durMs/detail;其余字段只影响运行日志投影与滚动摘要。 */
-export interface TraceOpts {
+export interface TraceOptions {
   /** 有跨度的事件给出时长 */
   durMs?: number;
   detail?: string;
@@ -144,7 +144,7 @@ export class PerfDiagnostics {
   } | null = null;
 
 
-  trace(lane: string, label: string, opts: TraceOpts = {}): DiagEvent {
+  trace(lane: string, label: string, opts: TraceOptions = {}): DiagEvent {
     const e: DiagEvent = { seq: ++this.seq, tsMs: Date.now(), lane, label };
     if (opts.durMs !== undefined) e.durMs = Math.round(opts.durMs);
     if (opts.detail) e.detail = opts.detail;

@@ -289,7 +289,7 @@ export function setMsg(el: HTMLElement, text: string, bad = false): void {
 /**
  * 带上下界与步长的数字输入。
  *
- * `ConsoleInputOpts` 有 `type: 'number'` 但没有 `min` / `max` / `step` / 宽度,
+ * `ConsoleInputOptions` 有 `type: 'number'` 但没有 `min` / `max` / `step` / 宽度,
  * 而这几个面板上的数字框(幅度、字号、行数、录制秒数)全都要。原语返回的是真
  * `<input>`,所以这里补设原生属性;宽度走本 provider 自己的 class。
  */
@@ -319,7 +319,7 @@ export function numField(
 }
 
 /**
- * 色板输入。`ConsoleInputOpts.type` 的枚举里没有 `color`(它是个跨 provider 少见的
+ * 色板输入。`ConsoleInputOptions.type` 的枚举里没有 `color`(它是个跨 provider 少见的
  * 类型),所以这里拿原语建出节点后改 `type`——这样 `field` 的皮、以及 `onChange`
  * 那条**带 `signal` 的监听**都还是原语给的,面板不必自己装监听。
  */

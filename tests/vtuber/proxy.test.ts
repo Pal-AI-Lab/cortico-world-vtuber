@@ -327,7 +327,7 @@ describe('演出引擎子进程退出的告知', () => {
 
   it('交接钩子:代理侧直接推一条 internal worlds.note(flush 档),不经子进程', () => {
     const { proxy, host } = makeIdleProxy();
-    proxy.onHandoff();
+    proxy.onHandoffEnded();
     expect(host.events).toHaveLength(1);
     const { e, opts } = host.events[0];
     expect(e.type).toBe('worlds.note');

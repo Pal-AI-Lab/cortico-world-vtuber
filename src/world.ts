@@ -48,7 +48,7 @@ import {
   type RoundOutcome,
   type SpeechRateHint,
 } from './orchestrator.ts';
-import { PerfDiagnostics, type TraceOpts } from './diagnostics.ts';
+import { PerfDiagnostics, type TraceOptions } from './diagnostics.ts';
 import { PerformStream } from './perform-stream.ts';
 import { describeSilence, silenceData } from './silence-scan.ts';
 import { DEFAULT_TIMEOUT_RANGE_MS, type StateChannel } from './states.ts';
@@ -1505,7 +1505,7 @@ export class VtuberWorld implements World {
    * 运行日志一条:区域按 LANE_AREA,级别显式给的优先、否则按 LANE_TRACE,
    * durMs 进 durMs,detail 与 data 合进 data。
    */
-  private tracePerf(lane: string, msg: string, opts: TraceOpts = {}): void {
+  private tracePerf(lane: string, msg: string, opts: TraceOptions = {}): void {
     const e = this.diag.trace(lane, msg, opts);
     const level = opts.level ?? (LANE_TRACE.has(lane) ? 'trace' : 'debug');
     if ((level === 'warn' || level === 'error') && opts.tally) {
@@ -1576,7 +1576,7 @@ export class VtuberWorld implements World {
     this.pushPerfFault('[演出] VTS 重新认证成功,自动重连已恢复。');
   }
 
-  onHandoff(): void {
+  onHandoffEnded(): void {
     this.pushPerfFault(HANDOFF_NOTE);
   }
 

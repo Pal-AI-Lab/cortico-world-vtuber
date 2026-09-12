@@ -6,7 +6,7 @@
  */
 import type { Logger } from 'cortico/core/types.ts';
 import { countPauses, pauseMs, segmentUnits, type AlignedUnit, type PausePriors } from './align.ts';
-import type { TraceOpts } from './diagnostics.ts';
+import type { TraceOptions } from './diagnostics.ts';
 import { planCut, pcm16ToFloat, type CutClass, type CutPlan } from './interrupt-fade.ts';
 import type { GestureCue, IRFrame, Mixer } from './mixer.ts';
 import { ScriptParser, type Beat, type BeatCommand, type SpeechAnchor, type SpeechPiece } from './parser.ts';
@@ -273,8 +273,8 @@ export interface PerformerDeps {
   }) => void;
   /** 外部播放被截断时使当前字幕失效。 */
   onSubtitleCut?: () => void;
-  /** 演出关键事件的旁路日志(轮/拍/TTS/cue/模式…);不提供则静默。opts.level 见 TraceOpts */
-  trace?: (area: string, msg: string, opts?: TraceOpts) => void;
+  /** 演出关键事件的旁路日志(轮/拍/TTS/cue/模式…);不提供则静默。opts.level 见 TraceOptions */
+  trace?: (area: string, msg: string, opts?: TraceOptions) => void;
   rng?: () => number;
   now?: () => number;
 }
@@ -565,7 +565,7 @@ export class Performer {
   private backlogLevel: 'ample' | 'empty' = 'empty';
   private lastBacklogAt = 0;
 
-  private readonly trace: (area: string, msg: string, opts?: TraceOpts) => void;
+  private readonly trace: (area: string, msg: string, opts?: TraceOptions) => void;
 
   constructor(deps: PerformerDeps) {
     this.d = deps;
