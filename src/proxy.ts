@@ -26,7 +26,7 @@ import type {
   ToolDef,
 } from 'cortico/core/types.ts';
 import { nowIso } from 'cortico/core/util.ts';
-import { emitLogNote } from 'cortico/core/ipcLogger.ts';
+import { emitLogNote } from 'cortico/core/ipc-logger.ts';
 import { childExecArgv } from 'cortico/extensions/runtime.ts';
 import { loadProfiles, profileChoices } from './models/index.ts';
 import { EXAMPLE_PACK_DIR, loadPack, vocabTableRows, type PerformancePack } from './pack.ts';
@@ -530,7 +530,7 @@ export class VtuberWorldProxy implements World {
   private async spawn(): Promise<void> {
     const child = fork(CHILD_ENTRY, [], {
       // tsx 的 ESM 钩子(跑 TS 源)加上框架的 `cortico/*` 解析钩子:engine-child.ts 那边
-      // 同样 import `cortico/core/ipcLogger.ts`,少了后者子进程起不来。
+      // 同样 import `cortico/core/ipc-logger.ts`,少了后者子进程起不来。
       execArgv: childExecArgv(),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });

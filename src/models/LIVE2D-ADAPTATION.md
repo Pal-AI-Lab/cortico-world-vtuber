@@ -202,7 +202,7 @@ gain 8、atZero −7、neutral 7/8 = 0.875、scale 0.125。
 
 ## 3. 验证
 
-1. VTS 加载 `Foo (Cortico)`。启动 bot(或 `dev-web` 之外的任何会连 VTS 的方式),打开控制台 →
+1. VTS 加载 `Foo (Cortico)`。启动 bot(或 `dev-console` 之外的任何会连 VTS 的方式),打开控制台 →
    VTuber → 「模型档案」。
 2. 头部一行应显示 `Foo (Cortico)` 与「配置指定」。显示「配置指定的档案不存在」说明 `live2dDir` 或 `id` 写错;
    显示「未识别 · 默认档案」说明 `vtsModelName` 与 `.vtube.json` 的 `Name` 不一致。

@@ -5,8 +5,8 @@
  * hreq/hrep。事件库仅重放播出延迟计算所需的 cursor、ts 与 source；range/grep
  * 返回空结果。
  */
-import { createIpcLogger } from 'cortico/core/ipcLogger.ts';
-import { withAnchors } from 'cortico/core/logContext.ts';
+import { createIpcLogger } from 'cortico/core/ipc-logger.ts';
+import { withAnchors } from 'cortico/core/log-context.ts';
 import {
   VTUBER_DEFAULTS,
   VtuberWorld,
