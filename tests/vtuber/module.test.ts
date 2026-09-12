@@ -1083,7 +1083,7 @@ describe('VtuberModule', () => {
   });
 
   it('ttsConsole:test 走真合成并送舞台;state 探测可达性', async () => {
-    // 「声线档案」的插件已经补上,所以声明里也有它(声明与插件同进同退)
+    // 「声线档案」的面板已经补上,所以声明里也有它(声明与面板同进同退)
     expect(panelIds(mod)).toContain('tts');
     const c = mod.ttsConsole();
     const out = await c.test();

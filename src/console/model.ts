@@ -5,8 +5,8 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import { errText, setMsg, type ModelState, type WiringReport } from './client.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -45,7 +45,7 @@ const HOW_TEXT: Record<string, string> = {
   missing: '配置指定的档案不存在',
 };
 
-export const modelPanel: ConsolePanelPlugin = {
+export const modelPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({

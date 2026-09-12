@@ -6,8 +6,8 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import {
   base64ToBytes,
   bytesToBase64,
@@ -54,7 +54,7 @@ interface TestWav {
   name: string;
 }
 
-export const ttsPanel: ConsolePanelPlugin = {
+export const ttsPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({ title: '声线档案', en: 'VoxCPM2', desc: DESC });

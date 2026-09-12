@@ -7,11 +7,11 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import { errText, numField, setMsg, type ClipsItem, type ClipsState } from './client.ts';
 
-export const clipsPanel: ConsolePanelPlugin = {
+export const clipsPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({

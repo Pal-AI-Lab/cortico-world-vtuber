@@ -7,9 +7,9 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
+  ConsolePanel,
   Disposable,
-} from 'cortico/web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-panel.ts';
 import { toDisposable } from './disposable.ts';
 import {
   base64ToBytes,
@@ -36,7 +36,7 @@ const ENVELOPE_COLS = 2048;
 const UNITS_TICK_MS = 300;
 const DEFAULT_TEXT = '我觉得我没想到嘿嘿这个确实';
 
-export const alignPanel: ConsolePanelPlugin = {
+export const alignPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const view = ctx.root.ownerDocument.defaultView;

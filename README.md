@@ -13,15 +13,15 @@ Live2D 模型(经 VTube Studio 的 Public API 注入参数),字幕按强制对�
 
 ## 与 Cortico 的关系
 
-这是一个**插件包**,不是 Cortico 的一部分。它按 Cortico 的插件契约声明自己:
+这是一个**扩展包**,不是 Cortico 的一部分。它按 Cortico 的扩展契约声明自己:
 
 ```jsonc
 "cortico": { "kind": "world", "api": 1, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
 ```
 
 运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/worlds.ts`、
-`cortico/core/types.ts` …)。这些 specifier 由框架 `src/plugins/runtime.ts` 注册的模块
-钩子解析到框架源码本身,**同一份实例**——插件与框架共用一个 `WorldAssembly`、一套
+`cortico/core/types.ts` …)。这些 specifier 由框架 `src/extensions/runtime.ts` 注册的模块
+钩子解析到框架源码本身,**同一份实例**——扩展与框架共用一个 `WorldAssembly`、一套
 日志锚点。因此包必须是 `"type": "module"`:CommonJS 包经 require 会拿到框架源码的
 第二份副本。
 
@@ -40,10 +40,10 @@ corepack pnpm build
 
 然后二选一装进 Cortico:
 
-- 控制台「插件」页手动安装,填本目录的绝对路径;
-- 或在 `<Cortico>/plugins/` 下 `corepack pnpm add --ignore-workspace <本目录绝对路径>`。
+- 控制台「扩展」页手动安装,填本目录的绝对路径;
+- 或在 `<Cortico>/extensions/` 下 `corepack pnpm add --ignore-workspace <本目录绝对路径>`。
 
-**装完要整进程重启 Cortico**:模组定义在装配表里,热激活开关管不到插件的装载。
+**装完要整进程重启 Cortico**:模组定义在装配表里,热激活开关管不到扩展的装载。
 
 ## 开发
 

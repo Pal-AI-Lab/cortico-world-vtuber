@@ -1,7 +1,7 @@
 /**
- * VTuber 代理与子进程模组声明相同的局部面板 id，浏览器插件键与声明一致。
+ * VTuber 代理与子进程模组声明相同的局部面板 id，面板 bundle键与声明一致。
  * mount 按链路前缀分派，diag 处理报表与台本演出。model.setProfile 通过装配层写回口保存，未接写回口须报错。
- * 插件资源须通过框架管理，受 fetch、document.body、裸定时器、RAF、WebSocket 和直连 /api/ 的架构约束。
+ * 面板资源须通过框架管理，受 fetch、document.body、裸定时器、RAF、WebSocket 和直连 /api/ 的架构约束。
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -15,11 +15,11 @@ import type { ModulePanelDecl } from 'cortico/core/types.ts';
 import { fixtureProfileJson, writeProfileDir } from '../vtuber/helpers.ts';
 
 /**
- * 插件是浏览器端代码(DOM 类型,由 tsconfig.web.json 单独 check)。
+ * 面板 bundle 是浏览器端代码(DOM 类型,由 tsconfig.web.json 单独 check)。
  * specifier 存进变量,免得根 tsconfig 把它拉进 Node 那份检查——
  * 与 worlds-qq-console.test.ts 同一个理由。
  */
-const VT_PLUGIN_ENTRY = '../../src/console/client.ts';
+const VT_BUNDLE_ENTRY = '../../src/console/client.ts';
 const CONSOLE_DIR = '../../src/console';
 
 const PANEL_IDS = ['mount', 'model', 'overlay', 'clips', 'tts', 'align', 'log', 'diag'];
@@ -169,17 +169,17 @@ describe('模型档案不再绕过自己的数据面', () => {
   });
 });
 
-describe('浏览器插件', () => {
+describe('面板 bundle', () => {
   it('default export 的九个面板键与服务端声明的局部 id 一一对应,且都能 mount', async () => {
-    const plugin = ((await import(VT_PLUGIN_ENTRY)) as any).default;
-    expect(Object.keys(plugin.panels).sort()).toEqual([...PANEL_IDS].sort());
-    for (const id of PANEL_IDS) expect(typeof plugin.panels[id].mount).toBe('function');
-    // 两份清单同进同退:服务端声明的每一条都得有插件,反过来也一样
+    const bundle = ((await import(VT_BUNDLE_ENTRY)) as any).default;
+    expect(Object.keys(bundle.panels).sort()).toEqual([...PANEL_IDS].sort());
+    for (const id of PANEL_IDS) expect(typeof bundle.panels[id].mount).toBe('function');
+    // 两份清单同进同退:服务端声明的每一条都得有面板,反过来也一样
     const declared = ((proxy().console().panels ?? []) as ModulePanelDecl[]).map((p) => p.id);
-    expect(Object.keys(plugin.panels).sort()).toEqual([...declared].sort());
+    expect(Object.keys(bundle.panels).sort()).toEqual([...declared].sort());
   });
 
-  it('插件没有直连 /api/ 的路径', async () => {
+  it('面板没有直连 /api/ 的路径', async () => {
     const offenders = await scan(/['"`]\/api\//);
     expect(offenders).toEqual([]);
   });
@@ -191,7 +191,7 @@ describe('浏览器插件', () => {
 
 });
 
-/** 扫插件目录里的所有 .ts,回违规的 `文件:行`。注释行不算(那是在解释"为什么不用")。 */
+/** 扫面板目录里的所有 .ts,回违规的 `文件:行`。注释行不算(那是在解释"为什么不用")。 */
 async function scan(re: RegExp): Promise<string[]> {
   const { readFileSync, readdirSync } = await import('node:fs');
   const { join } = await import('node:path');

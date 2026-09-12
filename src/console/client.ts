@@ -1,11 +1,11 @@
 /**
- * VTuber 演出模组的浏览器插件 —— 挂载 / 模型档案 / Overlay / 动作调参 / 声线档案 /
+ * VTuber 演出模组的面板 bundle —— 挂载 / 模型档案 / Overlay / 动作调参 / 声线档案 /
  * 时间点标注 / 离线歌曲 / 演出日志 / 演出诊断九个面板。
  *
  * 这个文件只做两件事:**装配**(把面板接到局部 id 上)与**共享 helper**
  * (类型、错误措辞、几个输入与资源生命周期包装)。面板本体各在自己的文件里。
  *
- * 与外界的依赖只有一条:`cortico/web/shared/client-plugin.ts` 里的**类型**——浏览器侧
+ * 与外界的依赖只有一条:`cortico/web/shared/client-panel.ts` 里的**类型**——浏览器侧
  * 只 `import type`,运行时的值(`toDisposable`、图标)在包内自带。没有
  * import 控制台内部模块,没有 `fetch`,没有 `document.body`,没有 `window.__*`——
  * 数据面一律走 `ctx.invoke` / `ctx.invokeBinary`,DOM 一律用 `ctx.ui` 的原语,
@@ -18,10 +18,10 @@
  */
 
 import type {
-  ConsoleClientPlugin,
+  ConsoleClientBundle,
   ConsolePanelContext,
   Disposable,
-} from 'cortico/web/shared/client-plugin.ts';
+} from 'cortico/web/shared/client-panel.ts';
 import { toDisposable } from './disposable.ts';
 import './style.css';
 import { mountPanel } from './mount.ts';
@@ -321,7 +321,7 @@ export function numField(
 /**
  * 色板输入。`ConsoleInputOpts.type` 的枚举里没有 `color`(它是个跨 provider 少见的
  * 类型),所以这里拿原语建出节点后改 `type`——这样 `field` 的皮、以及 `onChange`
- * 那条**带 `signal` 的监听**都还是原语给的,插件不必自己装监听。
+ * 那条**带 `signal` 的监听**都还是原语给的,面板不必自己装监听。
  */
 export function colorField(
   ctx: ConsolePanelContext,
@@ -447,12 +447,12 @@ export function delay(ctx: ConsolePanelContext, ms: number): Promise<boolean> {
 
 // ---------------------------------------------------------------------------
 
-const plugin: ConsoleClientPlugin = {
+const bundle: ConsoleClientBundle = {
   /**
    * 键是**局部** panel id,与服务端 `console().panels[].id` 一一对应
    * (`src/module.ts` 的 `VTUBER_PANEL_DECLS`)。
    *
-   * 声明与插件**同进同退**:这里少一个键,控制台就给一张"插件缺这个面板"的错误卡;
+   * 声明与面板 bundle**同进同退**:这里少一个键,控制台就给一张"面板产物缺这个面板"的错误卡;
    * 那边少一条声明,面板就在导航里够不着。八个面板两处必须逐条对上——
    * `tests/web/worlds-vtuber-console.test.ts` 拿这两份清单对咬。
    */
@@ -468,4 +468,4 @@ const plugin: ConsoleClientPlugin = {
   },
 };
 
-export default plugin;
+export default bundle;

@@ -639,10 +639,10 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
 /**
  * 控制台面板声明。**id 是局部 id**(`mount`,不是 `vtuber-mount`):模组不把自己的
  * 名字编进面板 id 里,控制台按 provider + 局部 id 路由,渲染由 `console/client.ts`
- * 的自有插件负责。
+ * 的自有面板 bundle 负责。
  *
- * 声明与插件**同进同退**:这里声明了而 `console/client.ts` 的 `panels` 里没有对应
- * 键,控制台就渲染一张"插件缺这个面板"的错误卡;反过来插件写了却不声明,面板在
+ * 声明与面板 bundle**同进同退**:这里声明了而 `console/client.ts` 的 `panels` 里没有对应
+ * 键,控制台就渲染一张"面板产物缺这个面板"的错误卡;反过来 bundle 写了却不声明,面板在
  * 导航里根本够不着。九条与那份键表逐条对齐。
  */
 export const VTUBER_PANEL_DECLS: readonly ModulePanelDecl[] = [

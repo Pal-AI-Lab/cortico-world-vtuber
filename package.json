@@ -19,7 +19,7 @@
   "main": "./src/index.ts",
   "cortico": {
     "kind": "world",
-    "api": 2,
+    "api": 3,
     "consoleClient": "dist/console.js",
     "consoleStyle": "dist/console.css"
   },

@@ -27,7 +27,7 @@ import type {
 } from 'cortico/core/types.ts';
 import { nowIso } from 'cortico/core/util.ts';
 import { emitLogNote } from 'cortico/core/ipcLogger.ts';
-import { childExecArgv } from 'cortico/plugins/runtime.ts';
+import { childExecArgv } from 'cortico/extensions/runtime.ts';
 import { loadProfiles, profileChoices } from './models/index.ts';
 import { EXAMPLE_PACK_DIR, loadPack, vocabTableRows, type PerformancePack } from './pack.ts';
 import {

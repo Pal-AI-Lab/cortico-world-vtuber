@@ -13,8 +13,8 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import {
   delay,
   errText,
@@ -33,7 +33,7 @@ interface Preset {
   script: string;
 }
 
-export const diagPanel: ConsolePanelPlugin = {
+export const diagPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({

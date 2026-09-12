@@ -5,8 +5,8 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import { errText, setMsg, type MountState, type TtsState, type VtsState } from './client.ts';
 
 /** 等 TTS 权重加载的轮询:每 2 秒问一次,最多 90 拍(3 分钟) */
@@ -34,7 +34,7 @@ interface MountRow {
   set(tone: RowTone, word: string, note?: string): void;
 }
 
-export const mountPanel: ConsolePanelPlugin = {
+export const mountPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({
@@ -66,7 +66,7 @@ export const mountPanel: ConsolePanelPlugin = {
 
     /**
      * 「我改了自己的状态,请重取 manifest」——VTS / TTS 那两颗徽标画在页头上
-     * (host 的地盘),插件够不着,只能说一声。面板已经卸了就别再叫醒 host。
+     * (host 的地盘),面板够不着,只能说一声。面板已经卸了就别再叫醒 host。
      */
     const bumpBadges = async (): Promise<void> => {
       if (ctx.signal.aborted) return;

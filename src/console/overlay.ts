@@ -12,8 +12,8 @@
 
 import type {
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import { toDisposable } from './disposable.ts';
 import {
   colorField,
@@ -31,7 +31,7 @@ const WEIGHTS = [
   { value: '900', label: '特粗' },
 ];
 
-export const overlayPanel: ConsolePanelPlugin = {
+export const overlayPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({

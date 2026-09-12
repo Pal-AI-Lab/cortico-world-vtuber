@@ -6,15 +6,15 @@
 import type {
   ConsoleLogTone,
   ConsolePanelContext,
-  ConsolePanelPlugin,
-} from 'cortico/web/shared/client-plugin.ts';
+  ConsolePanel,
+} from 'cortico/web/shared/client-panel.ts';
 import { errText, type PerfLogEntry } from './client.ts';
 
 const POLL_MS = 2000;
 /** 环形上限。模组那侧的事件环也是这个量级,再多留也拿不到。 */
 const MAX_LINES = 500;
 
-export const logPanel: ConsolePanelPlugin = {
+export const logPanel: ConsolePanel = {
   mount(ctx: ConsolePanelContext) {
     const { ui } = ctx;
     const card = ui.sheet({
