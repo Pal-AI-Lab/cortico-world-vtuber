@@ -19,7 +19,7 @@
 | [`examples/cortico.profile.json`](examples/cortico.profile.json) | 一份写完的真档案(适配 Type-H1),当读物。照着字段表猜不如看一眼成品;它不会被加载,见 [examples/README.md](examples/README.md)。 |
 
 表里的 vocab.json 与 clips.json 是范例演出包。bot 可以带自己的包(bot 包目录下的 `vtuber-pack/`,
-或模组选项 `packDir` 指到别处),那时读 bot 的那一份:fx 键与取值范围都以它为准。
+或 World 选项 `packDir` 指到别处),那时读 bot 的那一份:fx 键与取值范围都以它为准。
 
 ## 1. 目录约定
 

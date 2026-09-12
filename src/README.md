@@ -36,7 +36,7 @@ x-hot 配置快照与瘦事件信封(播出延迟地板用);子 → 主是日志
 词表(L1↔L2 契约)是演出包的 `vocab.json`,由 `pack.ts` 加载并做别名归一;
 `[]` 内可透传的 VoxCPM2 语气词属于 TTS 模型,清单在 `voice-tags.ts`。TTS 流水线在 `tts.ts`;语音经
 `device-audio.ts`(audify/RtAudio)直接写本机声卡,播放时点从本地时间线直读、
-驱动 lipsync 时钟。演出画面(字幕/动作标签/弹幕)由模组自带的 **overlay 页**渲染
+驱动 lipsync 时钟。演出画面(字幕/动作标签/弹幕)由 World 自带的 **overlay 页**渲染
 (`overlay/`,由 `perform-stream.ts` 的 HTTP 服务在 `/overlay` 直接 serve,透明底):
 OBS 加 browser source 指它即合成进直播画面。
 SSE `/stream` 是 overlay 的内部数据面;对外渲染契约是 overlay 页。观众弹幕从同一服务的
@@ -140,7 +140,7 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 - `audioSecondary` 副输出设备;`default`=当前系统默认(换耳机会跟着切)。
   主副落到同一设备时不重复写。
 - `obsDelaySec` + `delayedSources` 是防先知穿帮:OBS 对游戏画面设固定延迟 N 秒后
-  把 N 填进来,并列出被延迟画面对应的模组 id(如 `["minecraft"]`)。延迟源近期有事件时,
+  把 N 填进来,并列出被延迟画面对应的 World id(如 `["minecraft"]`)。延迟源近期有事件时,
   演出反应不早于观众看到的画面(向事件库反查,只看信封的 source/ts)。0 或空=不设地板。
 - `streamEnabled` / `alignEnabled` 是流式输出与逐字对齐的开关(都默认开、都热改),
   行为组合见「流式输出与 <> 锚点」一节;server 侧能力缺席时自动降级,不用手动关。
@@ -148,19 +148,19 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 - `decay*Sec` 是三个 State 通道无新指令后滑回中性的随机区间(秒),控制台可热改。
 - `live2dDir` 是 VTube Studio 加载模型的目录(`StreamingAssets/Live2DModels`),热改。
   模型档案按 `<live2dDir>/<模型目录>/cortico.profile.json` 在这里发现;模型文件仍由
-  VTS 加载,模组只读它们做复检。
+  VTS 加载,World 只读它们做复检。
 - `modelProfile` 选**模型档案**(见「模型档案」一节):一个档案 id,或 `auto` 按 VTS
   报的模型名认;控制台「模型档案」面板可换。指定的 id 在 `live2dDir` 下不存在时按
   `missing` 处理:画面照出(按模型名匹配,否则默认档案),日志打警告,面板标红。
   眼睑基线、眼球横轴取反、头部增益均由档案声明,不提供独立配置项。
 
-模组 `start` 连上 VTS 后会关掉当前已激活的反应表情,避免开局残留;档案
+World `start` 连上 VTS 后会关掉当前已激活的反应表情,避免开局残留;档案
 `keepExpressions` 列出的装扮与道具表情保留。
 
 ## 演出包
 
-参数集、演出词表与参数曲线是 bot 拥有的数据,不是模组代码:一个目录里三份 JSON,
-`params.json`、`vocab.json` 与 `clips.json`,放在 bot 包目录下的 `vtuber-pack/`;`examples/vtuber-pack/` 是模组自带的
+参数集、演出词表与参数曲线是 bot 拥有的数据,不是 World 代码:一个目录里三份 JSON,
+`params.json`、`vocab.json` 与 `clips.json`,放在 bot 包目录下的 `vtuber-pack/`;`examples/vtuber-pack/` 是 World 自带的
 范例包,也是 bot 没带包时的默认包。加载与校验在 [`pack.ts`](pack.ts)(`loadPack` →
 `PerformancePack`:`params` / `entries` / `aliases` / `pulse` / `sustain` / `gaze` / `fxIds`,
 `resolveTag` 做别名归一与查词,`lint` 报非致命警告)。主进程代理与演出子进程各自读同一个包:
@@ -214,7 +214,7 @@ VTS 首次连接要在它的弹窗里允许「Cortico Vtuber」插件(之后 tok
 
 ## 演出测试、动作调参与日志
 
-面板由本模组自己的面板 bundle渲染([`console/`](console/)),控制台按页签在它们之间切换,
+面板由本 World 自己的面板 bundle渲染([`console/`](console/)),控制台按页签在它们之间切换,
 一次显示一个;卡首一行摆着这一屏的读数(cue 数、注入帧率与丢帧率、日志条数)。
 除挂载外还有:
 - **动作调参**:改演出包的 `clips.json` / `vocab.json` 保存后按「重载参数」即刻生效
@@ -440,7 +440,7 @@ VTS **查不到输入→输出的映射表**(`ParameterSettings` 不在任何 AP
 
 ## 输入参数名单过滤(别让一个参数名毁掉整帧)
 
-连上 VTS 后模组会查一次 `InputParameterListRequest`,把实机认识的输入参数名交给 L4;
+连上 VTS 后 World 会查一次 `InputParameterListRequest`,把实机认识的输入参数名交给 L4;
 不在名单里的一律不发。原因是**注入一个不存在的参数会让整条注入请求被拒**(`APIError 453`),
 连同同一条请求里其他正常参数一起丢 —— 一个参数名就能让那一帧全灭。
 
@@ -570,7 +570,7 @@ sink 内部是一条按墙钟推进的连续样本时间线:泵保持写入领�
 模型与它的档案都在 VTube Studio 的 `Live2DModels` 目录里(`worlds.vtuber.live2dDir`),
 由 VTS 加载;仓库不含模型文件,也没有逐模型的说明文档,一个模型的全部适配信息就是
 它目录里的 `cortico.profile.json`(写法见 [`models/LIVE2D-ADAPTATION.md`](models/LIVE2D-ADAPTATION.md))。
-模组对模型目录只读:发现档案,复检 `.vtube.json`、idle 动画与表情文件。
+World 对模型目录只读:发现档案,复检 `.vtube.json`、idle 动画与表情文件。
 
 演出 gesture 由演出包 `clips.json` 的加性轨迹经参数注入驱动,不用模型的 motion3。FX 用模型自带的
 expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文件除挂件参数外若附带
@@ -583,7 +583,7 @@ expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文�
 `worlds.vtuber.tts*` 路径接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
 
 进程启停在「挂载」面板的「声音」那一行:spawn `llama-tts-server.exe`
-([`tts-server.ts`](tts-server.ts),端口取自 `ttsUrl`);模组停止时连带停掉它拉起的进程。
+([`tts-server.ts`](tts-server.ts),端口取自 `ttsUrl`);World 停止时连带停掉它拉起的进程。
 其余操作在「声线档案」和「时间点标注」面板：
 
 - **声线档案**:参考音频可「从本地导入」,缓存进配置的声线库目录(面板显示实际路径),
@@ -797,7 +797,7 @@ p75 正好是「典型片最多晚 1.7 秒 ≈ 慢片最多早 1.7 秒」的平�
 或切点越过已合成末尾时退回整体线性淡出才用它。resolve 带回**外流账本**
 (`RoundOutcome[]`:逐拍逐片"播没播、播到哪",切点按单元表反查字符偏移)。
 
-模组依据账本追加 `vtuber.act.outcome` 事件，报告关联调用、演出轮次、本地已播放
+World 依据账本追加 `vtuber.act.outcome` 事件，报告关联调用、演出轮次、本地已播放
 台词和截断精度。原始参数与受理回执不变；词表外标记只在执行时清理，并在回执说明。
 结果事件使用 external 来源、speak 标签与 flush 投递；不设置 ephemeral 或 snapshot。
 中断回执等待音频收束和事件持久化，随后同轮的新台词仍可正常演出。
@@ -818,4 +818,4 @@ p75 正好是「典型片最多晚 1.7 秒 ≈ 慢片最多早 1.7 秒」的平�
 - 输出设备(可选):主输出 `audioDevice`(默认 `CABLE Input`)给 OBS 采;副输出开关
   `audioMirrorSystem` 开着时写到 `audioSecondary`(默认同机当前默认播放设备)
 
-不依赖任何游戏/测试台模组:演出流挂零个订阅者照常演出。
+不依赖任何游戏/测试台 World:演出流挂零个订阅者照常演出。

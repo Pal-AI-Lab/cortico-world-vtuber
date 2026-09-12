@@ -2,7 +2,7 @@
  * VTuber 面板经 provider 通道的交互形态:GET/POST 透传、GET 带 args、$binary 回 wav
  * 字节(GET 与 POST 两条路都要)、$file 按声明的大小与 sha256 校验后流式发送、
  * 时间点标注那屏的四条数据面、没这个 provider 时 404。
- * 面板语义在模组侧,这里的 fake provider 按 VtuberModuleProxy.invokePanel 的
+ * 面板语义在 World 侧,这里的 fake provider 按 VtuberModuleProxy.invokePanel 的
  * wire 形状回话。
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -50,7 +50,7 @@ const call = async (
   return { status: r.status, body: (await r.json()) as any };
 };
 
-/** fake 模组面板面:形状对齐 VtuberModuleProxy.invokePanel */
+/** fake World 面板面:形状对齐 VtuberModuleProxy.invokePanel */
 const panels: Record<string, Record<string, (...args: any[]) => unknown>> = {
   tts: {
     state: () => ({ phase, url: 'http://127.0.0.1:8010', detail: null, pid: null, reachable: phase === 'running' }),
@@ -225,7 +225,7 @@ describe('vtuber tts 面板经 provider 通道', () => {
     const t = await call(port, '/api/console/providers/world%3Avtuber/panels/tts/test', ['来一句']);
     expect(t.body.message).toContain('文本=来一句');
 
-    // 面板上未保存的档案随试听请求一起过去(校验归模组,通道只透传)
+    // 面板上未保存的档案随试听请求一起过去(校验归 World,通道只透传)
     const audition = await call(port, '/api/console/providers/world%3Avtuber/panels/tts/test', ['听听新声线', { refAudio: '新人.wav', seed: 9 }]);
     expect(audition.body.message).toContain('"refAudio":"新人.wav"');
   });

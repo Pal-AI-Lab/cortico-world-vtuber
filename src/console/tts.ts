@@ -37,7 +37,7 @@ const IMPORT_HINT =
 const AUDIO_ACCEPT = '.wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wma,audio/*';
 
 /**
- * 生成参数的上下界。与模组的 `TTS_PROFILE_LIMITS` 同值:钳制仍归服务端
+ * 生成参数的上下界。与 World 的 `TTS_PROFILE_LIMITS` 同值:钳制仍归服务端
  * (面板改不了那份判断),这里只是让数字框的箭头与浏览器校验落在同一个区间里。
  */
 const LIMITS = {

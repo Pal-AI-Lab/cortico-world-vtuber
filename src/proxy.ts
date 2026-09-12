@@ -1,5 +1,5 @@
 /**
- * VtuberModuleProxy — 主进程侧的演出模组。
+ * VtuberModuleProxy — 主进程侧的演出 World。
  *
  * 真正的 VtuberModule 跑在子进程里(child.ts),这里只留不带时钟的部分:
  * 工具面与 outputTap 的消息转发、心跳状态行与控制台徽标的缓存、事件信封与
@@ -100,7 +100,7 @@ interface PendingRpc {
 /**
  * 子进程的 stdout/stderr 逐行进运行日志(区域 stdio):stdout 记 debug,stderr 记 warn,
  * event 是流名。跨 chunk 的半行攒到换行再发,流关时把残段发出;空行丢弃。
- * 模组自己的日志走 IPC note,这里只收自己写 console 的部件(tsx、原生模块、崩溃前的栈)。
+ * World 自己的日志走 IPC note,这里只收自己写 console 的部件(tsx、原生模块、崩溃前的栈)。
  */
 export function attachStdio(
   child: { stdout: Readable | null; stderr: Readable | null },
@@ -157,7 +157,7 @@ export class VtuberModuleProxy implements World {
 
   console(): ModuleConsoleDecl {
     return {
-      // 子进程报上来之前只有一件事是确定的:引擎在不在。真模组那排灯一到就盖掉这颗。
+      // 子进程报上来之前只有一件事是确定的:引擎在不在。真 World 那排灯一到就盖掉这颗。
       lamps: this.declCache.lamps ?? [this.child
         ? { label: '引擎', state: 'loading' as const, hint: '启动中' }
         : { label: '引擎', state: 'offline' as const, hint: '未启动' }],
@@ -346,7 +346,7 @@ export class VtuberModuleProxy implements World {
   }
 
   /**
-   * 输出旁路:增量原样转发进子进程,那边的真模组做流式解析与排队裁决。
+   * 输出旁路:增量原样转发进子进程,那边的真 World 做流式解析与排队裁决。
    * reasoning 增量不过界——演出链路不读它,省一半流量。
    */
   outputTap(): OutputTap {
@@ -589,7 +589,7 @@ export class VtuberModuleProxy implements World {
           ts: nowIso(this.opts.timezone ?? 'Asia/Shanghai'),
           source: this.id,
           type: 'worlds.note',
-          // 模组报自己这一侧机制的话:进 user 区,不进事件帧。
+          // World 报自己这一侧机制的话:进 user 区,不进事件帧。
           origin: 'internal',
           text:
             `[演出] 演出引擎子进程意外退出(code=${code}),画面与声音这段时间都停了;` +
@@ -634,7 +634,7 @@ export class VtuberModuleProxy implements World {
     this.onNote(msg.note);
   }
 
-  /** 子进程里模组的宿主调用:在真 host 上执行,把真实结果送回去 */
+  /** 子进程里 World 的宿主调用:在真 host 上执行,把真实结果送回去 */
   private async onHostRequest(id: number, req: HostRequest): Promise<void> {
     const child = this.child;
     try {
@@ -763,7 +763,7 @@ export class VtuberModuleProxy implements World {
 
   /**
    * getter 型选项采样成快照。键的在场集只看装配层给没给 getter,取值缺失时
-   * 落到模组默认——JSON 序列化会丢 undefined 值的键,而子进程在 init 时按
+   * 落到 World 默认——JSON 序列化会丢 undefined 值的键,而子进程在 init 时按
    * 键的在场集定死了 getter 集,在场集必须每次一致。
    */
   private sampleConfig(): EngineConfigSnapshot {

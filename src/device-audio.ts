@@ -489,7 +489,7 @@ export class DeviceAudioSink implements AudioSink {
     return true;
   }
 
-  /** 模组停机:收掉一切在途,关流 */
+  /** World 停机:收掉一切在途,关流 */
   close(): void {
     for (const t of this.tracks.splice(0)) this.finish(t);
     for (const t of [...this.endingTracks]) this.finish(t);

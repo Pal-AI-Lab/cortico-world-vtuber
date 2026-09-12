@@ -1,8 +1,8 @@
 /**
- * 模组模板占位符、控制台变量声明与运行时取值保持一致。
+ * World 模板占位符、控制台变量声明与运行时取值保持一致。
  *
- * 本包只有演出模组一件;框架仓库里那份同名测试覆盖框架自带的模组,以及 bot 目录下
- * 的 ENV_PROMPT.md 覆盖模板只用所属模组声明的占位符这一条。
+ * 本包只有演出 World 一件;框架仓库里那份同名测试覆盖框架自带的 World,以及 bot 目录下
+ * 的 ENV_PROMPT.md 覆盖模板只用所属 World 声明的占位符这一条。
  */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import { templateVarNames } from 'cortico/core/template.ts';
 import type { World } from 'cortico/core/types.ts';
 import { VtuberModuleProxy } from '../src/proxy.ts';
 
-/** 只构造模组，不启动外部连接。 */
+/** 只构造 World，不启动外部连接。 */
 const MODULES: Array<() => World> = [
   () => new VtuberModuleProxy(),
 ];
@@ -24,7 +24,7 @@ describe('环境提示词模板契约', () => {
     async (_id, make) => {
       const mod = make();
       const doc = envPromptDocOf(mod);
-      expect(doc, '每个模组都该声明 role=envPrompt 的模板').toBeTruthy();
+      expect(doc, '每个 World 都该声明 role=envPrompt 的模板').toBeTruthy();
 
       const declared = (doc!.vars ?? []).map((v) => v.name).sort();
       const inTemplate = templateVarNames(readFileSync(doc!.path, 'utf8')).sort();
@@ -45,7 +45,7 @@ describe('环境提示词模板契约', () => {
     },
   );
 
-  it('模组自己关掉半边功能时整段不进前缀,连模板都不读', async () => {
+  it('World 自己关掉半边功能时整段不进前缀,连模板都不读', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nullprompt-'));
     const path = join(dir, 'ENV_PROMPT.md');
     const mod: World = {

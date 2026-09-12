@@ -1,6 +1,6 @@
 /**
  * 模型档案面板管理 Live2D 演出资产的接线换算、只读复检与逐参数自检。档案位于模型目录的 cortico.profile.json，编写规则见 models/LIVE2D-ADAPTATION.md。
- * 换档通过 ctx.invoke("setProfile", [value]) 交由模组写回，不直接调用通用配置端点。
+ * 换档通过 ctx.invoke("setProfile", [value]) 交由 World 写回，不直接调用通用配置端点。
  */
 
 import type {

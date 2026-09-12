@@ -35,7 +35,7 @@ export interface VtsBackendOptions {
   onInjectOk?: () => void;
   /**
    * 连上之后由谁重建实机参数名单。给了就用它,它必须自己调 setKnownParameters
-   * (那一步同时解除本次的发帧暂停)。模组给的是 syncKnownParameters——那一份
+   * (那一步同时解除本次的发帧暂停)。 World 给的是 syncKnownParameters——那一份
    * 连模型定档一起重跑,名单因此只查一次。
    * 不给就自己查:backend 单独使用时也得自足,否则暂停永远解不掉。
    */

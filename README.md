@@ -2,12 +2,12 @@
 
 [Cortico](https://github.com/Phantivia/Cortico) 的 VTuber 演出 World,以独立 npm 包发布。
 
-模组把一段台本变成**连续演出**:文本经流式 TTS 出声,同一段文本解析出的动作记号驱动
+World 把一段台本变成**连续演出**:文本经流式 TTS 出声,同一段文本解析出的动作记号驱动
 Live2D 模型(经 VTube Studio 的 Public API 注入参数),字幕按强制对齐器给出的时间点
-跟着念,OBS 里的 overlay 画面由模组自带的演出流服务直接推。控制台里它有八个面板:
+跟着念,OBS 里的 overlay 画面由 World 自带的演出流服务直接推。控制台里它有八个面板:
 挂载、模型档案、Overlay、动作调参、声线档案、时间点标注、演出日志、演出诊断。
 
-模组内部的分层、演出包格式、台本记号与 Live2D 适配写在 [`src/README.md`](src/README.md)、
+World 内部的分层、演出包格式、台本记号与 Live2D 适配写在 [`src/README.md`](src/README.md)、
 [`src/vtuber_performance_module_design.md`](src/vtuber_performance_module_design.md) 与
 [`src/models/LIVE2D-ADAPTATION.md`](src/models/LIVE2D-ADAPTATION.md)。
 
@@ -43,7 +43,7 @@ corepack pnpm build
 - 控制台「扩展」页手动安装,填本目录的绝对路径;
 - 或在 `<Cortico>/extensions/` 下 `corepack pnpm add --ignore-workspace <本目录绝对路径>`。
 
-**装完要整进程重启 Cortico**:模组定义在装配表里,热激活开关管不到扩展的装载。
+**装完要整进程重启 Cortico**:World 定义在装配表里,热激活开关管不到扩展的装载。
 
 ## 开发
 

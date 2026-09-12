@@ -142,9 +142,9 @@ export const VTUBER_MODULE_DEFAULTS = {
   ttsAlignerLmFile: '',
   ttsAlignerAudioFile: '',
   ttsVoicesDir: '',
-  /** VTube Studio 已部署模型的记录位置；模组不直接加载 Live2D 文件。 */
+  /** VTube Studio 已部署模型的记录位置； World 不直接加载 Live2D 文件。 */
   live2dDir: '',
-  /** 演出包目录;空 = 随模组的范例包。bot 的层 2 默认通常指向自己的 vtuber-pack/。 */
+  /** 演出包目录;空 = 随 World 的范例包。bot 的层 2 默认通常指向自己的 vtuber-pack/。 */
   packDir: '',
   /** 禁播词(| 分隔多条):台本流里出现的子串整段滤掉,不进 TTS、不上字幕 */
   mutedTexts: '',
@@ -189,10 +189,10 @@ export const VTUBER_MODULE_DEFAULTS = {
   silenceLine3: '',
   /**
    * 播出延迟:OBS 对游戏画面设固定延迟 N 秒后,演出反应不得早于观众
-   * 看到的画面。0=未标定不设地板。哪些模组的画面被延迟见 delayedSources。
+   * 看到的画面。0=未标定不设地板。哪些 World 的画面被延迟见 delayedSources。
    */
   obsDelaySec: 0,
-  /** 被 OBS 延迟的画面对应的模组 id;地板只看这些来源的近期事件(信封 core 字段) */
+  /** 被 OBS 延迟的画面对应的 World id;地板只看这些来源的近期事件(信封 core 字段) */
   delayedSources: [] as string[],
   /**
     * 礼让收束的停顿搜索窗口(ms)。窗口内无单元间隙时立即淡出;0 始终立即淡出。
@@ -429,7 +429,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-path': { kind: 'directory' },
         description:
           '演出词表与曲线(params.json + vocab.json + clips.json)所在目录,人格资产。' +
-          '留空按三层找:本部署的 vtuber-pack/ > 人格包的 vtuber-pack/ > 随模组的范例包。' +
+          '留空按三层找:本部署的 vtuber-pack/ > 人格包的 vtuber-pack/ > 随 World 的范例包。' +
           '填了就压过这三层——指到仓库外的包时用它。' +
           '换目录重启生效;改目录里的文件用「动作调参」的重载。',
       },
@@ -556,10 +556,10 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
       },
       'worlds.vtuber.delayedSources': {
         type: 'array',
-        title: '延迟画面的模组',
+        title: '延迟画面的 World',
         'x-hot': true,
         description:
-          '被 OBS 延迟的画面对应的模组 id 数组(如 ["minecraft"]);地板只看这些来源的事件。' +
+          '被 OBS 延迟的画面对应的 World id 数组(如 ["minecraft"]);地板只看这些来源的事件。' +
           '控制台只读展示,改 config.json 生效。',
       },
       'worlds.vtuber.yieldWindowMs': {
@@ -637,7 +637,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
 };
 
 /**
- * 控制台面板声明。**id 是局部 id**(`mount`,不是 `vtuber-mount`):模组不把自己的
+ * 控制台面板声明。**id 是局部 id**(`mount`,不是 `vtuber-mount`):World 不把自己的
  * 名字编进面板 id 里,控制台按 provider + 局部 id 路由,渲染由 `console/client.ts`
  * 的自有面板 bundle 负责。
  *
@@ -728,7 +728,7 @@ export interface VtuberModuleOptions {
    * 禁播词以 | 分隔，在台本流入口过滤匹配片段，使其不进入 TTS、字幕或动作 cue。handler 回执闸无法撤回已流出的内容。
    */
   mutedText?: () => string;
-  /** 播出延迟(秒)与延迟源模组 id;每拍求值(x-hot) */
+  /** 播出延迟(秒)与延迟源 World id;每拍求值(x-hot) */
   obsDelaySec?: () => number;
   delayedSources?: () => string[];
   /** 礼让收束找停顿的窗口(ms);每次打断求值(x-hot) */
@@ -744,7 +744,7 @@ export interface VtuberModuleOptions {
   ttsAlignerAudioFile?: () => string;
   /** 外置声线库；空值沿用 ttsServerDir/voices。 */
   ttsVoicesDir?: () => string;
-  /** VTube Studio 部署目录的记录值；模组不直接加载其中的文件。 */
+  /** VTube Studio 部署目录的记录值； World 不直接加载其中的文件。 */
   live2dDir?: () => string;
   /** 演出包目录(params.json + vocab.json + clips.json);空 = worlds-vtuber 自带的范例包。启动时读一次,控制台「动作调参」可重载同一目录。 */
   packDir?: string;
@@ -762,7 +762,7 @@ export interface VtuberModuleOptions {
   modelProfile?: () => string;
   /**
    * 模型档案改变后回调(装配层写回 config.json)。与 `onTtsProfile` / `onOverlayConfig`
-   * 同一形状:模组只管说"现在该是这个值",落盘归装配层。
+   * 同一形状:World 只管说"现在该是这个值",落盘归装配层。
    *
    * 不给 = 面板上的档案下拉不可切换(会显式报错,而不是改完悄悄回弹)。
    */
@@ -1069,7 +1069,7 @@ export const PERFORM_PRESETS: Array<{ label: string; script: string }> = [
 ];
 
 /**
- * 停机等待整个演出队列（在播与排队）的时限。SHUTDOWN_RPC_TIMEOUT_MS 须覆盖此期限，且二者均须小于 SHUTDOWN_BUDGET_MS.worlds 的全部 IO 收尾预算，为其他模组保留收尾时间。
+ * 停机等待整个演出队列（在播与排队）的时限。SHUTDOWN_RPC_TIMEOUT_MS 须覆盖此期限，且二者均须小于 SHUTDOWN_BUDGET_MS.worlds 的全部 IO 收尾预算，为其他 World 保留收尾时间。
  */
 export const SHUTDOWN_DRAIN_MAX_MS = 10_000;
 
@@ -1091,7 +1091,7 @@ export const HANDOFF_NOTE =
   '[演出] 上下文刚交接。你之前的 vtuber_act 调用和回执已随上文清空,交接笔记里也没有它们,' +
   '看不到不等于没说过。观众还在听,现在就调 vtuber_act 开口和他们互动。';
 
-/** 已注册的演出工具声明(schema);模组与子进程代理共用,handler 各自绑定。
+/** 已注册的演出工具声明(schema);World 与子进程代理共用,handler 各自绑定。
  * 用法说明只写在 ENV_PROMPT.md(可编辑)与这里的 description,不再另开前缀段。 */
 export const VTUBER_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = [
   {
@@ -1581,7 +1581,7 @@ export class VtuberModule implements World {
   }
 
   /**
-   * 播出链路的故障告知。origin internal:这是模组报自己这一侧机制的话,进 user 区
+   * 播出链路的故障告知。origin internal:这是 World 报自己这一侧机制的话,进 user 区
    * 而不是事件帧——她对 external_event_frame 的内容是按"保持怀疑"读的,报障不该落在那里。
    */
   private pushPerfFault(text: string): void {
@@ -1912,7 +1912,7 @@ export class VtuberModule implements World {
     return {
       presets: () => PERFORM_PRESETS.map((p) => ({ ...p })),
       perform: (script) => {
-        if (!this.performer) return '[失败] 模组未启动';
+        if (!this.performer) return '[失败] World 未启动';
         const text = script.trim();
         if (!text) return '[失败] 台本为空';
         this.tracePerf('测试', `控制台演出测试:「${text.slice(0, 30)}…」`);
@@ -2142,7 +2142,7 @@ export class VtuberModule implements World {
         return { connected: false as const };
       },
       test: () => {
-        if (!this.performer) return '[失败] 模组未启动';
+        if (!this.performer) return '[失败] World 未启动';
         if (!this.vts.connected) return '[失败] VTS 未连接,先点「连接」';
         this.performer.perform('【点头,星星特效】');
         return '已排入测试动作:点头 + 星星特效,看形象';
@@ -2989,7 +2989,7 @@ export class VtuberModule implements World {
       `安静满 ${totalSec}s,投递静默提醒(第 ${tier + 1} 级${stalls > 0 ? `;这段卡住 ${stalls} 次` : ''})`,
       { event: 'remind', data: { totalSec, tier: tier + 1, stalls } },
     );
-    // 静默提醒是模组自己这一侧机制的话,internal origin 进 user 区。
+    // 静默提醒是 World 自己这一侧机制的话,internal origin 进 user 区。
     await host.pushEvent(
       {
         ts: nowIso(this.timezone),
@@ -3118,7 +3118,7 @@ export class VtuberModule implements World {
     const compact = content.replace(/\s+/g, ' ').trim();
     const quoted = compact.length > 200 ? `${compact.slice(0, 200)}…` : compact;
     this.tracePerf('提醒', `直接输出含演出标记(${compact.length}字),投递未送达提醒`);
-    // 未送达提醒是模组自己这一侧机制的话,internal origin 进 user 区。
+    // 未送达提醒是 World 自己这一侧机制的话,internal origin 进 user 区。
     void this.host
       .pushEvent(
         {
@@ -3140,7 +3140,7 @@ export class VtuberModule implements World {
   private async handleAct(script: string, callId: string | null, signal?: AbortSignal): Promise<string> {
     let cleanupNote = '';
     const receipt = (text: string): string => text + cleanupNote;
-    if (!this.performer) return receipt('[vtuber_act 失败] 模组未启动');
+    if (!this.performer) return receipt('[vtuber_act 失败] World 未启动');
     const streamedResult = callId === null ? undefined : this.recentStreamed.get(callId);
     if (callId !== null) this.recentStreamed.delete(callId);
     const normalization = streamedResult ?? normalizeExternalActScript(script);
@@ -3220,7 +3220,7 @@ export class VtuberModule implements World {
    * 到达的 vtuber_act 不受影响,哪怕它先一步经 tap 开了演。
    */
   private async handleInterrupt(callId: string | null): Promise<string> {
-    if (!this.performer) return '[vtuber_interrupt 失败] 模组未启动';
+    if (!this.performer) return '[vtuber_interrupt 失败] World 未启动';
     const fence = callId === null ? undefined : this.interruptFences.get(callId);
     if (callId !== null) this.interruptFences.delete(callId);
     const backlogMs = this.performer.speechBacklogMs();

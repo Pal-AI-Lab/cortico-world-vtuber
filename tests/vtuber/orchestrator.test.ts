@@ -171,7 +171,7 @@ function makeStreamPerformer(opts: {
    * 就掐流,交回的片带 silence 报告(triggered)。
    */
   silence?: { text: string; startMs: number };
-  /** 该片对齐判废(模组质量门口径):units 不采信,附最后对得上的单元末尾 */
+  /** 该片对齐判废(World 质量门口径):units 不采信,附最后对得上的单元末尾 */
   alignBad?: { text: string; lastGoodEndMs: number | null };
   /** 块间只让出事件循环、不等定时器:合成远快于播放,预取的片在前一片还播着时就收完流 */
   fastStream?: boolean;
@@ -638,7 +638,7 @@ describe('Performer 礼让收束与外流账本', () => {
     await waitFor(() => p.played.includes('新话。'));
   });
 
-  // 打断的作用域钉在调用时刻:晚于它开的轮一律不动。模组那侧的栅栏来自
+  // 打断的作用域钉在调用时刻:晚于它开的轮一律不动。 World 那侧的栅栏来自
   // tap 见到 vtuber_interrupt 调用头的那一刻(见 module.test 的同名用例)。
   it('preempt 带栅栏:栅栏之后开的轮不受这次打断影响', async () => {
     const p = makePerformer({ pieceMs: 600 });

@@ -1,7 +1,7 @@
 /**
- * 演出流服务:vtuber 模组的对外网络面。
+ * 演出流服务:vtuber World 的对外网络面。
  *
- * - `GET /overlay`(页面):模组自带的演出画面层——字幕(按 cue 时间轴)、动作
+ * - `GET /overlay`(页面):World 自带的演出画面层——字幕(按 cue 时间轴)、动作
  *   标签气泡、弹幕,透明底。这是演出画面的**唯一渲染实现**:OBS browser source
  *   订这里。
  * - `GET /stream`(SSE,单向广播):overlay 使用的演出语义数据面。渲染客户端使用

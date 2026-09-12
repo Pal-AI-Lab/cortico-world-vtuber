@@ -26,7 +26,7 @@
 - L4(backend):IR → VTS 注入,无状态管道。
 
 L1 的词表与 L3 的曲线资产合起来是**演出包**(`vocab.json` + `clips.json`),归 bot 所有,
-以 `packDir` 传给模组(缺省用 `examples/vtuber-pack/`);L2/L3 代码不认识任何具体的词或 clip,
+以 `packDir` 传给 World(缺省用 `examples/vtuber-pack/`);L2/L3 代码不认识任何具体的词或 clip,
 只按包里的 `(channel, clipId, lifecycle)` 与曲线工作。
 
 反向可检验性:换 backend 只动 L4;换脚本语法只动 L2 前端;未来接 actor 小模型 = L2 多一个 cue 生产者。
@@ -67,12 +67,12 @@ Core 内演出模块只暴露一个工具;游戏操作等其他工具与其并�
 
 **`vtuber_act(script: string)`**
 - script 为混编台本(标签脚本流)。空串不是"主动沉默":它一个字也播不出去,回执按失败形报,并点名 script 是空的。
-- **流式捕获**:模组识别到工具调用头即开始捕获参数文本流,逐字符送入 L2 解析器;不等待调用完成。解析、TTS 分片、演出与 LLM 生成全程流水线化。
+- **流式捕获**:World 识别到工具调用头即开始捕获参数文本流,逐字符送入 L2 解析器;不等待调用完成。解析、TTS 分片、演出与 LLM 生成全程流水线化。
 - 每次调用输出 **2–4 个 beat**,由提示词约束("说两三句就停下看看情况")。
 
 ### 1.3 事件注入格式
 
-- 弹幕:带用户名,逐条落一条事件;合批交给 Core 的安静窗口与地板,模组不自己攒。
+- 弹幕:带用户名,逐条落一条事件;合批交给 Core 的安静窗口与地板,World 不自己攒。
 - 游戏事件:文本化的局面描述与事件(对方落子、将军、认输等)。
 - 系统状态:当前模式、正在播放/排队的语音概要(供模型衔接语义)。
 
@@ -148,7 +148,7 @@ Core 内演出模块只暴露一个工具;游戏操作等其他工具与其并�
 每个 State 通道(Pose / Emotion / Gaze)一个**长驻状态机**,beat 仅向其发事件;非逐单元传递。
 
 - 转移:设置 → fade_in ≈ 300ms crossfade;同通道新值直接 crossfade;重复设当前值重发 cue(爆发型 sustain 分量重新起势);超时缓慢衰减回中性(2–3s 淡出);Reset 全清。
-- 超时:默认 Gaze 4–6s,Pose 10–15s,Emotion 20–30s;可在控制台模组配置里按通道热调(`worlds.vtuber.decay*Sec`)。
+- 超时:默认 Gaze 4–6s,Pose 10–15s,Emotion 20–30s;可在控制台 World 配置里按通道热调(`worlds.vtuber.decay*Sec`)。
 - crossfade 由 L2 在 cue 中声明(`fade_in` 字段),L3 执行,L2 不逐帧计算。
 
 ### 3.3 时序:speech_onset 与 gap
@@ -182,7 +182,7 @@ gap = max( boundary_base, max(本beat各标签 speech_onset) )
 
 拉起 LLM 的节奏归 bot 侧的心跳(装配层在演出链路起着时给 `tickDelayMs` 提速到秒级
 快拍,心跳文案带演出状态行,嘴空没空她自己看);弹幕与游戏事件照常走事件投递。
-模组不额外造唤醒时机。
+World 不额外造唤醒时机。
 
 允许空输出(沉默合法)。
 
@@ -203,8 +203,8 @@ gap = max( boundary_base, max(本beat各标签 speech_onset) )
 
 - OBS 对游戏画面(**含游戏音频**)设固定延迟 N 秒;Live2D 与 TTS 不延迟。
 - N 取延迟分布(prefill + 首 beat 生成 + TTFA)的 **P10–P20 分位**(宁小勿大,禁止反应先于事件)。
-- 配置两个值,都归 vtuber 模组:`obsDelaySec`(OBS 里设的 N)与 `delayedSources`
-  (被延迟画面对应的模组 id 数组)。不需要任何游戏→演出的旁路信号:排演出时向
+- 配置两个值,都归 vtuber World:`obsDelaySec`(OBS 里设的 N)与 `delayedSources`
+  (被延迟画面对应的 World id 数组)。不需要任何游戏→演出的旁路信号:排演出时向
   Core 的事件库反查 `source ∈ delayedSources` 且 `ts > now − N` 的事件,
   **演出锚点 ≥ 事件时刻 + N + ε**。只消费信封的 core 字段(source/ts),不读正文、
   不认识游戏词表;比 now−N 更老的事件给出的地板在过去,扫描天然有界。

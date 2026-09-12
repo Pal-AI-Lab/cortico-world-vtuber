@@ -87,7 +87,7 @@ class SlimEventStore implements EventStoreReader {
 }
 
 const store = new SlimEventStore();
-// 根 logger 不带区域名:主进程那侧的 host.log 已经是本模组的区域,
+// 根 logger 不带区域名:主进程那侧的 host.log 已经是本 World 的区域,
 // 这里再冠一层会让日志落成 core.worlds.vtuber.vtuber
 const log = makeLogger('');
 
@@ -121,7 +121,7 @@ const host: WorldHost = {
   // 渲染回调过不了进程边界;演出状态行的投递成文挂单由主进程代理侧实现(proxy.armStatus)
   pushDeferred: () => unavailable('pushDeferred'),
   store,
-  // filter 函数过不了进程边界:主进程按"本模组来源"筛,drain 语义只窄不宽
+  // filter 函数过不了进程边界:主进程按"本 World 来源"筛,drain 语义只窄不宽
   drainPendingEvents: () => hostRpc({ kind: 'drain' }) as Promise<EventEnvelope[]>,
   modelFacts: {
     model: () => unavailable('modelFacts.model'),
@@ -143,7 +143,7 @@ let statusTimer: ReturnType<typeof setInterval> | null = null;
 let lastStatus = '';
 let shuttingDown = false;
 
-/** init 快照里在场的键才建 getter:键缺席 = 装配层没提供,模组用自己的默认 */
+/** init 快照里在场的键才建 getter:键缺席 = 装配层没提供,World 用自己的默认 */
 function configGetters(initial: EngineConfigSnapshot): Partial<VtuberModuleOptions> {
   snap = initial;
   const out: Partial<VtuberModuleOptions> = {};

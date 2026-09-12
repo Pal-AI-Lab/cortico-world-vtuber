@@ -1,5 +1,5 @@
 /**
- * VTuber 演出模组的面板 bundle —— 挂载 / 模型档案 / Overlay / 动作调参 / 声线档案 /
+ * VTuber 演出 World 的面板 bundle —— 挂载 / 模型档案 / Overlay / 动作调参 / 声线档案 /
  * 时间点标注 / 离线歌曲 / 演出日志 / 演出诊断九个面板。
  *
  * 这个文件只做两件事:**装配**(把面板接到局部 id 上)与**共享 helper**
@@ -151,8 +151,8 @@ export interface ClipsState {
 /**
  * 声线档案(`tts.setProfile` 收的、`tts.state` 里回的那份)。
  *
- * 字段名与模组的 `TtsProfile` 一字不差:面板把整份表单原样交回去,服务端钳制后
- * 回一份生效值。这里不复制那些上下界——钳制归模组,面板只负责如实读出来。
+ * 字段名与 World 的 `TtsProfile` 一字不差:面板把整份表单原样交回去,服务端钳制后
+ * 回一份生效值。这里不复制那些上下界——钳制归 World,面板只负责如实读出来。
  */
 export interface TtsProfile {
   /** voices/ 下的 wav 文件名;null = 不带参考音频 */

@@ -11,7 +11,7 @@ import type {
 import { errText, type PerfLogEntry } from './client.ts';
 
 const POLL_MS = 2000;
-/** 环形上限。模组那侧的事件环也是这个量级,再多留也拿不到。 */
+/** 环形上限。 World 那侧的事件环也是这个量级,再多留也拿不到。 */
 const MAX_LINES = 500;
 
 export const logPanel: ConsolePanel = {
@@ -80,7 +80,7 @@ export const logPanel: ConsolePanel = {
 };
 
 /**
- * 一行的配色。模组自己在出问题的那些行文首打了 `⚠`(注入报错、对齐退化、
+ * 一行的配色。 World 自己在出问题的那些行文首打了 `⚠`(注入报错、对齐退化、
  * 重载失败),这里不另作判断,只把那个既有标记翻译成 `warn` 配色。
  */
 function toneOf(e: PerfLogEntry): ConsoleLogTone {

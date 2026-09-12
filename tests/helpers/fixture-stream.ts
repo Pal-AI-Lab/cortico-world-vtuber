@@ -2,7 +2,7 @@
  * 把老式的逐段增量(`LLMDelta`)翻成 Open Responses 的事件流,供测试给 `OutputTap`
  * 喂真事件序列。框架 `tests/core/fixture-protocol.ts` 里那份的最小子集:本包只用
  * `legacyTap`,它只依赖 `FixtureStream`,其余(fixture 客户端、core 假件、
- * ContextRecord 互转)都与演出模组无关。
+ * ContextRecord 互转)都与演出 World 无关。
  */
 
 import type { LLMUsage, OutputTap } from 'cortico/core/types.ts';

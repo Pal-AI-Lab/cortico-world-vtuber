@@ -18,7 +18,7 @@ import type { ModuleConsoleDecl } from 'cortico/core/types.ts';
 import type { OverlayConfig, TtsProfile, VtuberDecaySec } from './module.ts';
 
 /**
- * x-hot 配置的取值快照。键缺席 = 装配层没提供那个 getter(子进程用模组默认值);
+ * x-hot 配置的取值快照。键缺席 = 装配层没提供那个 getter(子进程用 World 默认值);
  * 键的在场集在 init 时定死,之后的快照只更新取值。
  */
 export interface EngineConfigSnapshot {
@@ -45,7 +45,7 @@ export interface EngineConfigSnapshot {
   live2dDir?: string;
 }
 
-/** 子进程里构造真模组的一次性载荷 */
+/** 子进程里构造真 World 的一次性载荷 */
 export interface EngineInit {
   timezone: string;
   botName: string;
@@ -113,7 +113,7 @@ export type EngineNote =
 
 /**
  * 子 → 主:宿主调用(WorldHost 有回执的那几个方法,跨进程兑现真实结果)。
- * drain 的 filter 函数过不了界:跨进程宿主只支持"取本模组来源的事件"这一种。
+ * drain 的 filter 函数过不了界:跨进程宿主只支持"取本 World 来源的事件"这一种。
  */
 export type HostRequest =
   | {

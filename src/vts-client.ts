@@ -29,7 +29,7 @@ const NO_ACK_MS = 3_000;
 const TIMEOUT_STREAK_LIMIT = 3;
 /** 重连退避阶梯,封顶 5 秒:皮套冻结的每一秒都在直播上 */
 const RECONNECT_BACKOFF_MS = [500, 1_000, 2_000, 4_000, 5_000];
-/** close() 等对端 Close 帧的死线;超了自己 terminate,不让模组 stop 陪 ws 库耗满 30 秒 */
+/** close() 等对端 Close 帧的死线;超了自己 terminate,不让 World stop 陪 ws 库耗满 30 秒 */
 const CLOSE_DEADLINE_MS = 1_000;
 
 export interface VtsClientOptions {
@@ -230,7 +230,7 @@ export class VtsClient {
         resolve();
       };
       /*
-       * 半开时对端不会回 Close 帧,ws 库要等满 30 秒才硬拆——模组 stop 的预算
+       * 半开时对端不会回 Close 帧,ws 库要等满 30 秒才硬拆——World stop 的预算
        * 装不下(MODULE_STOP_MS)。到点自己 terminate。
        */
       const deadline = setTimeout(() => {

@@ -192,11 +192,11 @@ export interface PreparedPlaybackOptions {
   speechProsody?: boolean;
 }
 
-/** TTS 后端能力面。模组按开关与 server 能力决定给哪几样(§合成路径四组合)。 */
+/** TTS 后端能力面。 World 按开关与 server 能力决定给哪几样(§合成路径四组合)。 */
 export interface PerformerTts {
-  /** 整段合成;开启对齐时模组内部已挂质量门并附 units */
+  /** 整段合成;开启对齐时 World 内部已挂质量门并附 units */
   synth(text: string, signal?: AbortSignal): Promise<TtsPiece>;
-  /** 流式合成;server 不支持或开关关闭时缺席。返回的完整片可能带 units(模组收流后对齐)。maxDurationMs=跑飞止损预算,超出即掐流保留已收部分 */
+  /** 流式合成;server 不支持或开关关闭时缺席。返回的完整片可能带 units(World 收流后对齐)。maxDurationMs=跑飞止损预算,超出即掐流保留已收部分 */
   synthStream?(text: string, sink: TtsStreamSink, signal: AbortSignal, maxDurationMs?: number): Promise<TtsPiece>;
   /** 对一段 PCM16 前缀跑对齐(锚点抢时间用);对齐不可用返回 null */
   alignPcm?(pcm: Uint8Array, sampleRate: number, units: string[]): Promise<AlignedUnit[] | null>;
@@ -209,7 +209,7 @@ export interface PerformCueNote {
 }
 
 /**
- * 一次估计使用的语速，由模组按当前声线近期样本计算。编排器不缓存，每次现取；样本更新后，同一文本的估计可随语速变化。
+ * 一次估计使用的语速，由 World 按当前声线近期样本计算。编排器不缓存，每次现取；样本更新后，同一文本的估计可随语速变化。
  */
 export interface SpeechRateHint {
   /** 每语言单元的时长(ms);与 SPEECH_LEAD_IN_MS 配套用 */
@@ -236,7 +236,7 @@ export interface PerformerDeps {
   pack: () => PerformancePack;
   log: Logger;
   /**
-   * 播出延迟地板:演出不得早于这个墙钟时刻(0=无约束)。模组按
+   * 播出延迟地板:演出不得早于这个墙钟时刻(0=无约束)。 World 按
    * OBS 延迟与延迟源的近期事件算出来;编排器每拍现问,不缓存。
    */
   broadcastFloorMs?: () => number;
@@ -301,7 +301,7 @@ interface StreamSeg {
   failed: boolean;
   /** 整片死气已作废(静默起点≈0 且覆盖近全片):不入声卡、playSeg 不发字幕 */
   dead: boolean;
-  /** 收流后的完整片(模组开对齐时带 units) */
+  /** 收流后的完整片(World 开对齐时带 units) */
   result: TtsPiece | null;
   abort: (() => void) | null;
   /** 播放中最近一次前缀对齐的结果;锚点抢跑与字幕跟播共用,一段同时最多一次在途 */
@@ -1183,7 +1183,7 @@ export class Performer {
    * 这一刻的语速口径。全编排器只有这一个入口:字幕 estimate 档、跑飞门预算、
    * 锚点死线、积压估计、回执时长全从这儿取,不许再有第二个 ms/单元。
    *
-   * 模组返回不合法数(NaN、0、负数、离谱大)时按没接处理,回落常数——估计路径
+   * World 返回不合法数(NaN、0、负数、离谱大)时按没接处理,回落常数——估计路径
    * 出错的代价是字幕错位,不该让它变成除零或天文数字的定时器。
    */
   private rateHint(): SpeechRateHint {
@@ -1220,7 +1220,7 @@ export class Performer {
 
   /**
    * 语音积压(ms):当前播放剩余时长加排队片段时长;未合成片段使用校准估值。
-   * 模组的积压闸与回执都用它;session 永不为此阻塞。
+   * World 的积压闸与回执都用它;session 永不为此阻塞。
    */
   speechBacklogMs(): number {
     const now = this.now();
@@ -2128,7 +2128,7 @@ export class Performer {
         clearInterval(timer);
         return;
       }
-      // 收流后模组附上了全量 units:一次解决所有未决锚点
+      // 收流后 World 附上了全量 units:一次解决所有未决锚点
       const full = seg.result?.units;
       if (full && full.length > 0) {
         for (const st of pending) fire(st, this.unitStartMs(full, st.unitIndex, seg.result?.durationMs ?? 0), '对齐');

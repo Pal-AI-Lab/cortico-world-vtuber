@@ -1,5 +1,5 @@
 /**
- * VTuber 代理与子进程模组声明相同的局部面板 id，面板 bundle键与声明一致。
+ * VTuber 代理与子进程 World 声明相同的局部面板 id，面板 bundle键与声明一致。
  * mount 按链路前缀分派，diag 处理报表与台本演出。model.setProfile 通过装配层写回口保存，未接写回口须报错。
  * 面板资源须通过框架管理，受 fetch、document.body、裸定时器、RAF、WebSocket 和直连 /api/ 的架构约束。
  */
@@ -34,7 +34,7 @@ const contribution = (p: VtuberModuleProxy) =>
 // ---------------------------------------------------------------------------
 
 describe('VTuber 的面板声明', () => {
-  it('八个面板都是局部 id + 真标题,不带模组名前缀', () => {
+  it('八个面板都是局部 id + 真标题,不带 World 名前缀', () => {
     const panels = (proxy().console().panels ?? []) as ModulePanelDecl[];
     expect(panels.every((p) => typeof p === 'object')).toBe(true);
     expect(panels.map((p) => p.id)).toEqual(PANEL_IDS);
@@ -46,7 +46,7 @@ describe('VTuber 的面板声明', () => {
   });
 
 
-  it('主进程代理报的面板就是模组那份常量(两处不会各说各话)', () => {
+  it('主进程代理报的面板就是 World 那份常量(两处不会各说各话)', () => {
     expect(proxy().console().panels).toEqual([...VTUBER_PANEL_DECLS]);
   });
 

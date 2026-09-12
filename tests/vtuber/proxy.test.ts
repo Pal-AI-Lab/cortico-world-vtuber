@@ -207,10 +207,10 @@ describe('VtuberModuleProxy(演出引擎子进程)', () => {
     expect(result).not.toContain('已开演(流式)');
   });
 
-  it('子进程日志落在模组自己的区域,不多冠一层;演出通道跨 IPC 后仍是 worlds.vtuber.<通道>', async () => {
+  it('子进程日志落在 World 自己的区域,不多冠一层;演出通道跨 IPC 后仍是 worlds.vtuber.<通道>', async () => {
     await waitFor(() => host.logs.some((l) => l.event === 'round-open'));
     const open = host.logs.find((l) => l.event === 'round-open');
-    // host 给的区域就是模组的区域;子进程的根 logger 不再叠一次模组名
+    // host 给的区域就是 World 的区域;子进程的根 logger 不再叠一次 World 名
     expect(open).toMatchObject({ area: 'worlds.vtuber.round', level: 'info' });
     expect(host.logs.every((l) => l.area === 'worlds.vtuber' || l.area.startsWith('worlds.vtuber.'))).toBe(true);
     expect(host.logs.some((l) => l.area.includes('vtuber.vtuber'))).toBe(false);
@@ -234,7 +234,7 @@ describe('VtuberModuleProxy(演出引擎子进程)', () => {
   });
 
   it('管道类子进程错误降级,真故障仍是 error', () => {
-    // 关机时子进程已被杀,演出模组再往管道写一笔就是 EPIPE:那是时序噪音,
+    // 关机时子进程已被杀,演出 World 再往管道写一笔就是 EPIPE:那是时序噪音,
     // 记成 error 会让「按 error 找故障」这条复盘路径失效。
     const internals = proxy as unknown as { child: { emit: (ev: string, err: Error) => void }; stopping: boolean };
     const pipe = host.logs.length;
@@ -344,7 +344,7 @@ describe('演出引擎子进程退出的告知', () => {
     expect(host.logs.some((l) => l.level === 'error' && l.msg.includes('意外退出'))).toBe(true);
     const note = host.events.find((x) => x.e.type === 'worlds.note');
     expect(note).toBeDefined();
-    // 报障是模组自己这一侧机制的话:进 user 区,不落进「保持怀疑」的事件帧
+    // 报障是 World 自己这一侧机制的话:进 user 区,不落进「保持怀疑」的事件帧
     expect(note!.e.origin).toBe('internal');
     expect(note!.opts?.trigger).toBe('flush');
     expect(note!.e.text).toContain('意外退出');
@@ -362,7 +362,7 @@ describe('演出引擎子进程退出的告知', () => {
 
 /*
  * 子进程的 stdout/stderr 不再继承主进程终端:逐行进运行日志的 stdio 区域。
- * 演出模组自己的日志走 IPC note,这一路只收直接写 console 的部件。
+ * 演出 World 自己的日志走 IPC note,这一路只收直接写 console 的部件。
  */
 describe('attachStdio', () => {
   it('跨 chunk 的半行拼成一条;stdout 记 debug、stderr 记 warn;空行丢弃;流关时残段发出', async () => {

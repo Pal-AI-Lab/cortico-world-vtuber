@@ -24,7 +24,7 @@ export interface VtuberConfigSection {
   ttsAlignerAudioFile: string;
   ttsVoicesDir: string;
   live2dDir: string;
-  /** 演出包目录;空 = bot 目录下的 `vtuber-pack/`,没有则用随模组的范例包。 */
+  /** 演出包目录;空 = bot 目录下的 `vtuber-pack/`,没有则用随 World 的范例包。 */
   packDir: string;
   /** 禁播词(| 分隔多条);台本流里出现的子串整段不进 TTS、不上字幕。 */
   mutedTexts: string;
@@ -62,11 +62,11 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
     overlay: structuredClone(OVERLAY_CONFIG_DEFAULTS),
   }),
   // 播放设备下拉的整张表(含"系统默认 / 不出声"固定项)。枚举本机声卡要 audify,那是本包的
-  // 依赖;模组自报,宿主与 bot 都不替它答,控制台也不认识这两个 kind。
+  // 依赖;World 自报,宿主与 bot 都不替它答,控制台也不认识这两个 kind。
   configOptions: (kind, language) => playbackConfigOptions(kind, language),
   create: (ctx) => {
     const { cfg } = ctx;
-    // 演出包三层,与环境提示词同一套规则:部署覆盖 > 人格包自带 > 模组范例(packDir 为空时)。
+    // 演出包三层,与环境提示词同一套规则:部署覆盖 > 人格包自带 > World 范例(packDir 为空时)。
     // `cfg.packDir` 是部署配置里手填的绝对路径,压过一切——指到仓库外的包时用它。
     const packDir = cfg.packDir.trim()
       || [join(ctx.botDir, 'vtuber-pack'), join(ctx.packageDir, 'vtuber-pack')].find((d) => existsSync(d))

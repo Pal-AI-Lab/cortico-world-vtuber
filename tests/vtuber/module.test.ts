@@ -23,7 +23,7 @@ import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfile
 
 const ffmpegExe = findFfmpeg('');
 
-/** 面板声明里的局部 id(新式对象声明;字符串形态这个模组已经不用了) */
+/** 面板声明里的局部 id(新式对象声明;字符串形态这个 World 已经不用了) */
 function panelIds(m: VtuberModule): string[] {
   return (m.console().panels ?? []).map((p) => (typeof p === 'string' ? p : p.id));
 }
@@ -53,7 +53,7 @@ class FakeHost implements WorldHost {
     opts?: PushOptions,
   ): Promise<EventEnvelope> {
     const full = { origin: 'external', ...e, cursor: this.events.length + this.notes.length + 1 } as EventEnvelope;
-    // 通道融合后模组自省信号走 pushEvent(origin:'internal');分开收集保持断言语义
+    // 通道融合后 World 自省信号走 pushEvent(origin:'internal');分开收集保持断言语义
     if (full.origin === 'internal') {
       this.notes.push(full.text);
       return full;
@@ -126,7 +126,7 @@ class FakeVts {
     for (const c of this.wss.clients) c.send(msg);
   }
 
-  /** port=0 随机挑;给定端口用于「VTS 后起」——模组得连回同一个地址 */
+  /** port=0 随机挑;给定端口用于「VTS 后起」——World 得连回同一个地址 */
   async start(port = 0): Promise<void> {
     await new Promise<void>((r) => this.http.listen(port, '127.0.0.1', () => r()));
     this.port = (this.http.address() as { port: number }).port;
@@ -614,7 +614,7 @@ describe('VtuberModule', () => {
     await waitFor(() => mod.statusLine()?.includes('安静') ?? false);
   });
 
-  it('弹幕逐条落一条事件,合批交给核心(模组不再自己攒一遍)', async () => {
+  it('弹幕逐条落一条事件,合批交给核心(World 不再自己攒一遍)', async () => {
     stage.sendDanmaku('主播好', '观众A');
     stage.sendDanmaku('来啦', '观众A2');
     await waitFor(() => host.events.filter(({ e }) => e.type === 'vtuber.danmaku').length === 2);
@@ -1231,7 +1231,7 @@ describe('VtuberModule', () => {
    * VTS 晚于 bot 启动时，自动连上的首次认证也须执行模型定档。
    */
   it('VTS 后起:自己连上的那一次补跑定档,档案从默认档切回按模型名匹配', async () => {
-    // 先占一个端口拿号再让开:模组开播的那一刻 VTS 还没起来
+    // 先占一个端口拿号再让开:World 开播的那一刻 VTS 还没起来
     const probe = createServer();
     await new Promise<void>((r) => probe.listen(0, '127.0.0.1', () => r()));
     const port = (probe.address() as { port: number }).port;
