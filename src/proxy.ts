@@ -1,7 +1,7 @@
 /**
  * VtuberWorldProxy — 主进程侧的演出 World。
  *
- * 真正的 VtuberWorld 跑在子进程里(child.ts),这里只留不带时钟的部分:
+ * 真正的 VtuberWorld 跑在子进程里(engine-child.ts),这里只留不带时钟的部分:
  * 工具面与 outputTap 的消息转发、心跳状态行与控制台徽标的缓存、事件信封与
  * x-hot 配置的采样推送、以及子进程生命周期(拉起/崩溃重启/停机)。
  * 60Hz 求值注入、TTS/对齐/声卡、演出流服务全在子进程,主进程事件循环上的
@@ -59,11 +59,11 @@ import type {
   EngineRequest,
   HostRequest,
   SlimEvent,
-} from './ipc.ts';
+} from './engine-ipc.ts';
 import { invalidActScriptShapeReceipt, normalizeExternalActScript } from './act-script.ts';
 
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
-const CHILD_ENTRY = fileURLToPath(new URL('./child.ts', import.meta.url));
+const CHILD_ENTRY = fileURLToPath(new URL('./engine-child.ts', import.meta.url));
 
 /** x-hot 配置的采样周期:控制台热改最迟这么久到达子进程 */
 const CONFIG_SAMPLE_MS = 1000;
@@ -529,7 +529,7 @@ export class VtuberWorldProxy implements World {
 
   private async spawn(): Promise<void> {
     const child = fork(CHILD_ENTRY, [], {
-      // tsx 的 ESM 钩子(跑 TS 源)加上框架的 `cortico/*` 解析钩子:child.ts 那边
+      // tsx 的 ESM 钩子(跑 TS 源)加上框架的 `cortico/*` 解析钩子:engine-child.ts 那边
       // 同样 import `cortico/core/ipcLogger.ts`,少了后者子进程起不来。
       execArgv: childExecArgv(),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],

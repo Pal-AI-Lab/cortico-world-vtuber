@@ -22,7 +22,7 @@ import type {
   HostRequest,
   MainToChild,
   SlimEvent,
-} from './ipc.ts';
+} from './engine-ipc.ts';
 import type {
   EventEnvelope,
   EventStoreReader,

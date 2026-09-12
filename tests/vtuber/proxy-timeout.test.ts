@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { WorldHost } from 'cortico/core/types.ts';
-import type { EngineRequest } from '../../src/ipc.ts';
+import type { EngineRequest } from '../../src/engine-ipc.ts';
 import { VtuberWorldProxy } from '../../src/proxy.ts';
 
 afterEach(() => vi.useRealTimers());
