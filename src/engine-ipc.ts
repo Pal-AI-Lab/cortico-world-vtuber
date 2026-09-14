@@ -52,7 +52,6 @@ export interface EngineInit {
   vtsWsUrl: string;
   streamPort: number;
   ttsUrl: string;
-  ttsServerDir: string | null;
   /** 演出包目录;null = 范例包 */
   packDir: string | null;
   diagDir: string | null;

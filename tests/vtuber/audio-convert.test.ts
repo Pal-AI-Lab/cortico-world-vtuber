@@ -23,7 +23,7 @@ function ascii(s: string): number[] {
   return [...s].map((c) => c.charCodeAt(0));
 }
 
-const ffmpeg = findFfmpeg('');
+const ffmpeg = findFfmpeg();
 const withFfmpeg = ffmpeg ? it : it.skip;
 
 describe('sniffAudioFormat', () => {
@@ -47,18 +47,10 @@ describe('sniffAudioFormat', () => {
 });
 
 describe('findFfmpeg', () => {
-  it('包内 bin/ 优先于 PATH', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ac-serverdir-'));
-    try {
-      expect(findFfmpeg(dir)).toBe(ffmpeg); // bin/ 里没有,回落 PATH(本机没装则 null)
-      mkdirSync(join(dir, 'bin'));
-      const bundled = join(dir, 'bin', FFMPEG_EXE);
-      writeFileSync(bundled, '');
-      chmodSync(bundled, 0o755);
-      expect(findFfmpeg(dir)).toBe(bundled);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it('只认 PATH,本机没装就是 null', () => {
+    const found = findFfmpeg();
+    expect(found).toBe(ffmpeg);
+    if (found !== null) expect(found.endsWith(FFMPEG_EXE)).toBe(true);
   });
 });
 

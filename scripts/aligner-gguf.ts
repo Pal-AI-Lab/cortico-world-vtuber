@@ -4,11 +4,11 @@
  *   tsx scripts/aligner-gguf.ts [--src <目录>] [--out <目录>]
  *
  * 产出两个文件:
- * - Qwen3-Aligner-LM-Q8_0.gguf    llama.cpp `qwen3` 架构的 0.6B 主干 + 词表
+ * - Qwen3-Aligner-LM-F16.gguf     llama.cpp `qwen3` 架构的 0.6B 主干 + 词表
  * - Qwen3-Aligner-Audio-F16.gguf  mtmd/clip 的 `qwen3a` 音频塔 + 多模态投影 + 时间桶头
  *
- * 主干权重矩阵使用 Q8_0,归一化层保留 F32,显存约为 F16 方案的一半。分类输出的
- * 时间桶宽为几十毫秒。音频塔与多模态投影使用 F16,时间桶头 `score.weight` 使用 F32。
+ * 主干权重矩阵使用 F16,归一化层保留 F32。音频塔与多模态投影使用 F16,
+ * 时间桶头 `score.weight` 使用 F32。
  *
  * 时间桶头(score.weight,5000×1024)与音频 GGUF 同存。主干加载器拒绝额外张量;
  * 音频加载器允许未知张量,对齐器按名称读取该张量。
@@ -36,16 +36,11 @@ const enum KvType {
   ARRAY = 9,
 }
 
-/** ggml_type,只用到这三个 */
+/** ggml_type,只用到这两个 */
 const enum GgmlType {
   F32 = 0,
   F16 = 1,
-  Q8_0 = 8,
 }
-
-/** block_q8_0:32 个元素共用一个 f16 缩放,后跟 32 个 int8 */
-const QK8_0 = 32;
-const Q8_0_BLOCK_BYTES = 34;
 
 type KvValue =
   | { t: KvType.UINT32 | KvType.INT32; v: number }
@@ -180,11 +175,6 @@ function bf16BitsToF16Bits(b: number): number {
   return f32BitsToF16Bits((b << 16) >>> 0);
 }
 
-function f32ToF16Bits(v: number): number {
-  floatView[0] = v;
-  return f32BitsToF16Bits(bitsView[0]);
-}
-
 function f32BitsToF16Bits(x: number): number {
   const sign = (x >>> 16) & 0x8000;
   const abs = x & 0x7fffffff;
@@ -262,33 +252,10 @@ class SafeTensors {
 
 // ─── 张量计划 ─────────────────────────────────────────────────────────────
 
-/** 分块写,避免为一个 311MB 张量再额外分配一份等大缓冲。是 32 的倍数,不切断 q8 块 */
+/** 分块写,避免为一个 311MB 张量再额外分配一份等大缓冲 */
 const CHUNK_ELEMS = 1 << 22;
 
 function encodeChunk(bits: Uint16Array, off: number, end: number, type: GgmlType): Buffer {
-  if (type === GgmlType.Q8_0) {
-    const blocks = (end - off) / QK8_0;
-    const buf = Buffer.allocUnsafe(blocks * Q8_0_BLOCK_BYTES);
-    const block = new Float32Array(QK8_0);
-    for (let b = 0; b < blocks; b++) {
-      let amax = 0;
-      for (let i = 0; i < QK8_0; i++) {
-        const v = bf16ToF32(bits[off + b * QK8_0 + i]);
-        block[i] = v;
-        if (Math.abs(v) > amax) amax = Math.abs(v);
-      }
-      const d = amax / 127;
-      const inv = d ? 1 / d : 0;
-      const p = b * Q8_0_BLOCK_BYTES;
-      buf.writeUInt16LE(f32ToF16Bits(d), p);
-      for (let i = 0; i < QK8_0; i++) {
-        // ggml 用 roundf,半数远离零;JS 的 Math.round 对负数是往 +∞ 取
-        const q = block[i] * inv;
-        buf.writeInt8(q < 0 ? -Math.round(-q) : Math.round(q), p + 2 + i);
-      }
-    }
-    return buf;
-  }
   const width = type === GgmlType.F16 ? 2 : 4;
   const buf = Buffer.allocUnsafe((end - off) * width);
   for (let i = off; i < end; i++) {
@@ -301,14 +268,7 @@ function encodeChunk(bits: Uint16Array, off: number, end: number, type: GgmlType
 function planFrom(st: SafeTensors, src: string, name: string, type: GgmlType): TensorPlan {
   const e = st.get(src);
   const nelem = e.shape.reduce((a, b) => a * b, 1);
-  // q8 块沿 ne[0] 切,也就是 torch 的最后一维(内存里连续的那一维)
-  if (type === GgmlType.Q8_0 && e.shape[e.shape.length - 1] % QK8_0 !== 0) {
-    throw new Error(`${src} 末维 ${e.shape[e.shape.length - 1]} 不是 ${QK8_0} 的倍数,量化不了`);
-  }
-  const nbytes =
-    type === GgmlType.Q8_0
-      ? (nelem / QK8_0) * Q8_0_BLOCK_BYTES
-      : nelem * (type === GgmlType.F16 ? 2 : 4);
+  const nbytes = nelem * (type === GgmlType.F16 ? 2 : 4);
   return {
     name,
     ne: [...e.shape].reverse(),
@@ -421,7 +381,7 @@ interface AlignerConfig {
 
 function lmTensors(st: SafeTensors, cfg: AlignerConfig): TensorPlan[] {
   const p = 'model.language_model.';
-  const q = GgmlType.Q8_0;
+  const q = GgmlType.F16;
   const out: TensorPlan[] = [planFrom(st, `${p}embed_tokens.weight`, 'token_embd.weight', q)];
   for (let i = 0; i < cfg.text_config.num_hidden_layers; i++) {
     const s = `${p}layers.${i}.`;
@@ -450,7 +410,7 @@ function lmKv(cfg: AlignerConfig, vocab: Vocab): Map<string, KvValue> {
   kv.set('general.architecture', { t: KvType.STRING, v: 'qwen3' });
   kv.set('general.type', { t: KvType.STRING, v: 'model' });
   kv.set('general.name', { t: KvType.STRING, v: 'Qwen3-ForcedAligner-0.6B' });
-  kv.set('general.file_type', { t: KvType.UINT32, v: 7 }); // LLAMA_FTYPE_MOSTLY_Q8_0
+  kv.set('general.file_type', { t: KvType.UINT32, v: 1 }); // LLAMA_FTYPE_MOSTLY_F16
   kv.set('general.alignment', { t: KvType.UINT32, v: GGUF_ALIGNMENT });
   kv.set('qwen3.block_count', { t: KvType.UINT32, v: t.num_hidden_layers });
   kv.set('qwen3.context_length', { t: KvType.UINT32, v: t.max_position_embeddings });
@@ -563,7 +523,7 @@ async function main(): Promise<void> {
   const vocab = buildVocab(join(src, 'tokenizer.json'), cfg.text_config.vocab_size);
 
   const jobs: [string, Map<string, KvValue>, TensorPlan[]][] = [
-    ['Qwen3-Aligner-LM-Q8_0.gguf', lmKv(cfg, vocab), lmTensors(st, cfg)],
+    ['Qwen3-Aligner-LM-F16.gguf', lmKv(cfg, vocab), lmTensors(st, cfg)],
     ['Qwen3-Aligner-Audio-F16.gguf', audioKv(cfg), audioTensors(st, cfg)],
   ];
   for (const [name, kv, tensors] of jobs) {

@@ -39,9 +39,13 @@ export interface TtsServerResources {
 }
 
 export interface TtsServerOptions {
-  /** voxcpm2-server 目录；随包二进制固定从 bin/ 读取。 */
-  serverDir: string;
-  /** 空字符串沿用 serverDir/models 下的旧文件名。 */
+  /** 运行时目录:解压好的 release,或配置里自备的目录;空字符串 = 还没装 */
+  runtimeDir: () => string;
+  /** 运行时目录下 server 可执行文件的名字,按平台 */
+  serverExe: () => string;
+  /** 权重目录;配置里留空的那几项回落到这里的固定文件名 */
+  modelsDir: string;
+  /** 空字符串沿用 modelsDir 下的固定文件名。 */
   baseLmFile?: () => string;
   acousticFile?: () => string;
   alignerLmFile?: () => string;
@@ -49,8 +53,6 @@ export interface TtsServerOptions {
   port: number;
   host?: string;
   nGpuLayers?: number;
-  /** CUDA 运行时目录;存在则前置进 PATH */
-  cudaBinDir?: string;
   log: Logger;
   /** 测试注入:替换被 spawn 的命令与参数 */
   commandOverride?: { command: string; args: string[] };
@@ -59,8 +61,6 @@ export interface TtsServerOptions {
   healthTimeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
-
-const DEFAULT_CUDA_BIN = 'C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin\\x64';
 
 /**
  * spawn 失败的人话。Windows 上 errno=UNKNOWN 几乎只有一个来源:应用控制策略
@@ -209,7 +209,7 @@ export class TtsServerManager {
       };
     }
     const resources = this.resolveResources();
-    const binDir = join(this.opts.serverDir, 'bin');
+    const runtimeDir = this.opts.runtimeDir().trim();
     const required: Array<[string, TtsServerResource | TtsServerResources['server']]> = [
       ['TTS server', resources.server],
       ['VoxCPM2 BaseLM', resources.baseLm],
@@ -233,8 +233,14 @@ export class TtsServerManager {
         };
       }
     }
-    const cudaBin = this.opts.cudaBinDir ?? DEFAULT_CUDA_BIN;
-    const pathPrefix = existsSync(cudaBin) ? `${binDir};${cudaBin};` : `${binDir};`;
+    // 运行时目录里自带 CUDA 运行库(release 配的 cudart),不去碰系统上的 CUDA Toolkit
+    const env = { ...process.env };
+    if (process.platform === 'win32') {
+      env.PATH = `${runtimeDir};${process.env.PATH ?? ''}`;
+    } else {
+      const key = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
+      env[key] = `${runtimeDir}${process.env[key] ? `:${process.env[key]}` : ''}`;
+    }
     const args = [
       '--host', this.host,
       '--port', String(this.opts.port),
@@ -245,40 +251,28 @@ export class TtsServerManager {
     if (resources.alignerReady) {
       args.push('--aligner-lm', resources.alignerLm.path, '--aligner-audio', resources.alignerAudio.path);
     }
-    return {
-      command: resources.server.path,
-      args,
-      cwd: binDir,
-      env: { ...process.env, PATH: pathPrefix + (process.env.PATH ?? '') },
-    };
+    return { command: resources.server.path, args, cwd: runtimeDir, env };
   }
 
   private resolveResources(): TtsServerResources {
-    const binDir = join(this.opts.serverDir, 'bin');
-    const modelsDir = join(this.opts.serverDir, 'models');
+    const runtimeDir = this.opts.runtimeDir().trim();
+    const modelsDir = this.opts.modelsDir;
     const configured = (get?: () => string): string => get?.().trim() ?? '';
     const resource = (value: string, fallback: string): TtsServerResource => {
       const path = value ? resolve(value) : fallback;
       return { path, ready: existsSync(path), configured: value.length > 0 };
     };
 
-    const baseLm = resource(configured(this.opts.baseLmFile), join(modelsDir, 'VoxCPM2-BaseLM-Q8_0.gguf'));
+    const baseLm = resource(configured(this.opts.baseLmFile), join(modelsDir, 'VoxCPM2-BaseLM-F16.gguf'));
     const acoustic = resource(configured(this.opts.acousticFile), join(modelsDir, 'VoxCPM2-Acoustic-F16.gguf'));
     const alignerLmValue = configured(this.opts.alignerLmFile);
-    const alignerLmCandidates = [
-      join(modelsDir, 'Qwen3-Aligner-LM-Q8_0.gguf'),
-      join(modelsDir, 'Qwen3-Aligner-LM-F16.gguf'),
-    ];
-    const alignerLm = resource(
-      alignerLmValue,
-      alignerLmCandidates.find((path) => existsSync(path)) ?? alignerLmCandidates[0],
-    );
+    const alignerLm = resource(alignerLmValue, join(modelsDir, 'Qwen3-Aligner-LM-F16.gguf'));
     const alignerAudioValue = configured(this.opts.alignerAudioFile);
     const alignerAudio = resource(
       alignerAudioValue,
       join(modelsDir, 'Qwen3-Aligner-Audio-F16.gguf'),
     );
-    const serverPath = join(binDir, 'llama-tts-server.exe');
+    const serverPath = runtimeDir ? join(runtimeDir, this.opts.serverExe()) : '';
     const alignerRequired = alignerLmValue.length > 0 || alignerAudioValue.length > 0;
     const alignerReady = alignerLm.ready && alignerAudio.ready;
     return {

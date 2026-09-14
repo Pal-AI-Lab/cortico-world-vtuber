@@ -18,6 +18,8 @@ export interface VtuberConfigSection {
   vtsWsUrl: string;
   streamPort: number;
   ttsUrl: string;
+  ttsRuntimeDir: string;
+  ttsRuntimeRelease: string;
   ttsBaseLmFile: string;
   ttsAcousticFile: string;
   ttsAlignerLmFile: string;
@@ -78,6 +80,8 @@ export const VTUBER: WorldDefinition<VtuberConfigSection> = {
       vtsWsUrl: cfg.vtsWsUrl,
       streamPort: cfg.streamPort,
       ttsUrl: cfg.ttsUrl,
+      ttsRuntimeDir: () => cfg.ttsRuntimeDir,
+      ttsRuntimeRelease: () => cfg.ttsRuntimeRelease,
       ttsBaseLmFile: () => cfg.ttsBaseLmFile,
       ttsAcousticFile: () => cfg.ttsAcousticFile,
       ttsAlignerLmFile: () => cfg.ttsAlignerLmFile,

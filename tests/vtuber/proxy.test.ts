@@ -103,9 +103,9 @@ describe('VtuberWorldProxy(演出引擎子进程)', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl,
-      ttsServerDir: serverDir,
       audioDevice: () => 'none',
       speechCapSec: () => 30,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       live2dDir: () => live2dDir,
     });
     await proxy.start(host);
@@ -273,7 +273,6 @@ describe('VtuberWorldProxy(演出引擎子进程)', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl,
-      ttsServerDir: serverDir,
       audioDevice: () => 'none',
       speechCapSec: () => 30,
     });

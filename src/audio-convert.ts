@@ -55,10 +55,8 @@ export function sniffAudioFormat(bytes: Uint8Array): AudioFormat | null {
   return null;
 }
 
-/** ffmpeg 可执行文件:优先包内 bin/(与 llama-tts-server 同处),其次 PATH */
-export function findFfmpeg(serverDir: string): string | null {
-  const bundled = join(serverDir, 'bin', FFMPEG_EXE);
-  if (existsSync(bundled)) return bundled;
+/** ffmpeg 可执行文件:只认 PATH。转码不是 World 的本职,不随包分发也不代装 */
+export function findFfmpeg(): string | null {
   for (const dir of (process.env.PATH ?? '').split(delimiter)) {
     if (!dir) continue;
     const candidate = join(dir, FFMPEG_EXE);

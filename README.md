@@ -1,6 +1,6 @@
 # cortico-world-vtuber
 
-[Cortico](https://github.com/Phantivia/Cortico) 的 VTuber 演出 World,以独立 npm 包发布。
+[Cortico](https://github.com/Pal-AI-Lab/Cortico) 的 VTuber 演出 World,以独立 npm 包发布。
 
 World 把一段台本变成**连续演出**:文本经流式 TTS 出声,同一段文本解析出的动作记号驱动
 Live2D 模型(经 VTube Studio 的 Public API 注入参数),字幕按强制对齐器给出的时间点
@@ -61,8 +61,29 @@ corepack pnpm build       # esbuild → dist/console.{js,css}
 `cortico/*` 配 alias 也不 external**——报 "Could not resolve cortico/…" 就说明浏览器侧
 漏了一处运行时依赖,去把它本地化,不要在构建里放行。
 
-`src/voxcpm2-server/` 是 TTS 服务端的启动脚本与说明;二进制与模型权重都在它自己的
-`.gitignore` 里,不入库。
+## TTS 运行时与权重
+
+World 不带二进制也不带权重,控制台的 TTS 面板负责把它们取来:
+
+- **运行时**装到 `<运行时根>/llama.cpp-omni/<release>/<平台后端>/`。二进制来自
+  [Phantivia/llama.cpp-omni](https://github.com/Phantivia/llama.cpp-omni) 的 `tts-*` release
+  (上游 `tc-mb/llama.cpp-omni` 不发这几个可执行文件),Windows CUDA 版另取 ggml-org 的
+  cudart 包。自己编的构建填进「TTS 运行时目录」就不再下载。
+- **权重**下到 `<模型根>/vtuber/`:VoxCPM2 的两个 GGUF 走 HuggingFace 钉住的 revision,
+  对齐器的两个随运行时 release 发布。来源与许可见
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+- **参考音频**属于部署私有资产,放「声线库目录」,留空时落在权重目录旁边。
+
+真机跑一遍全流程:
+
+```bash
+tsx scripts/check-tts-runtime.ts
+```
+
+它会装运行时、下权重、起 server,然后打 `/health`、流式合成、对齐各一次。联网,要显卡,
+默认装在 `scratch/tts-runtime-check/` 下,不碰真部署。
+
+对齐器缺席时 TTS 照常,只是没有逐字时间点,字幕与锚点回落按字符比例估计。
 
 ## 第三方资产
 
@@ -77,3 +98,8 @@ Type-H1 的许可 §4.5 禁止 AI 用途,模型文件本身从不出现在这个
 `main` 现在指向 `./src/index.ts`:框架进程跑在 tsx 下,TS 入口可直接 import,开发期
 省一次构建。真要发到 npm 时把它改成 JS 产物(并把 `src` 换成 `dist` 进 `files`),
 否则装到没有 tsx 的宿主上会起不来。
+
+## 许可
+
+AGPL-3.0-or-later,见 [LICENSE](LICENSE)。框架 Cortico 是 MIT,两者经 HTTP 与扩展契约相连,
+许可各归各。想提 PR 见 [CONTRIBUTING.md](CONTRIBUTING.md)。

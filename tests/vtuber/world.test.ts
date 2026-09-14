@@ -21,7 +21,7 @@ import { EXAMPLE_PACK_DIR } from '../../src/pack.ts';
 import { decodeWav } from '../../src/tts.ts';
 import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfileDir, type LogLine } from './helpers.ts';
 
-const ffmpegExe = findFfmpeg('');
+const ffmpegExe = findFfmpeg();
 
 /** 面板声明里的局部 id(新式对象声明;字符串形态这个 World 已经不用了) */
 function panelIds(m: VtuberWorld): string[] {
@@ -316,6 +316,8 @@ describe('VtuberWorld', () => {
     ttsWav = null;
     savedProfiles = [];
     tts = createServer((req, res) => {
+      // 这个夹具只实现整段合成;流式能力探测按 404 回落
+      if (req.url === '/v1/audio/speech/stream') { res.writeHead(404); res.end(); return; }
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
@@ -339,7 +341,7 @@ describe('VtuberWorld', () => {
       // 不可达端口:VTS 缺席时演出仍走
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl: `http://127.0.0.1:${ttsPort}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       onTtsProfile: (p) => savedProfiles.push(p),
       // 积压闸测试用最紧的上限;正常用例积压为 0,闸不介入
       speechCapSec: () => 3,
@@ -499,7 +501,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       speechCapSec: () => 3,
       audioDevice: () => 'none',
       mutedText: () => '(这句已归入交接笔记)',
@@ -554,7 +556,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
       diagDir,
     } as const;
@@ -728,7 +730,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
       ttsUrl: 'http://127.0.0.1:1',
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
     });
     const host2 = new FakeHost();
@@ -806,7 +808,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl: `http://127.0.0.1:${ttsPort}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       speechCapSec: () => 3,
       audioDevice: () => 'none',
       maxActRoundsPerTurn: () => 3,
@@ -1139,7 +1141,6 @@ describe('VtuberWorld', () => {
     const mod2 = new VtuberWorld({
       streamPort: 0,
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
-      ttsServerDir: serverDir,
       ttsVoicesDir: () => voicesDir,
       live2dDir: () => live2dDir,
       audioDevice: () => 'none',
@@ -1192,7 +1193,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
       ttsUrl: 'http://127.0.0.1:1',
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
     });
     const host2 = new FakeHost();
@@ -1244,7 +1245,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${port}`,
       ttsUrl: 'http://127.0.0.1:1',
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
       live2dDir: () => live2d,
     });
@@ -1287,7 +1288,7 @@ describe('VtuberWorld', () => {
       streamPort: 0,
       vtsWsUrl: `ws://127.0.0.1:${vts.port}`,
       ttsUrl: 'http://127.0.0.1:1',
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
       live2dDir: () => live2d,
     });
@@ -1368,7 +1369,7 @@ describe('VtuberWorld', () => {
     const mod2 = new VtuberWorld({
       streamPort: 0,
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
       packDir,
     });
@@ -1555,6 +1556,7 @@ describe('VtuberWorld 播报队列', () => {
     mkdirSync(join(serverDir, 'voices'));
     // 每次合成回 3 秒音频:队列有厚度,水位才会真的从满降到空
     tts = createServer((req, res) => {
+      if (req.url === '/v1/audio/speech/stream') { res.writeHead(404); res.end(); return; }
       req.on('data', () => {});
       req.on('end', () => {
         res.writeHead(200, { 'Content-Type': 'audio/wav' });
@@ -1567,7 +1569,7 @@ describe('VtuberWorld 播报队列', () => {
       streamPort: 0,
       vtsWsUrl: 'ws://127.0.0.1:1',
       ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
-      ttsServerDir: serverDir,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
       audioDevice: () => 'none',
       speechCapSec: () => 60,
       silenceRemindSec: () => 1,

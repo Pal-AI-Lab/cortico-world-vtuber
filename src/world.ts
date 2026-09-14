@@ -65,6 +65,10 @@ import {
   type TtsSynthProfile,
 } from './tts.ts';
 import { TtsServerManager, type TtsServerState } from './tts-server.ts';
+import { modelsRoot, runtimesRoot } from 'cortico/paths.ts';
+import { ModelStore, type ModelId, type ModelState } from './runtime/models.ts';
+import { PINNED_RELEASE, defaultBackend, planFor, type Backend, type ReleasePlan } from './runtime/release.ts';
+import { RuntimeStore, type InstallState } from './runtime/store.ts';
 import { VtsClient } from './vts-client.ts';
 import { EXAMPLE_PACK_DIR, loadPack, vocabTableRows, type PerformancePack } from './pack.ts';
 import { resolveVoiceTag } from './voice-tags.ts';
@@ -82,7 +86,9 @@ import {
 } from './act-script.ts';
 
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
-const TTS_SERVER_DIR = fileURLToPath(new URL('./voxcpm2-server', import.meta.url));
+
+/** 权重目录:`<模型根>/vtuber/`,与 docs/runtimes.md 的约定一致(owner 用 World id) */
+const TTS_MODELS_DIR = join(modelsRoot(), 'vtuber');
 
 
 /** overlay 字幕样式;控制台面板改,经装配层回写 config.json,SSE 热推给所有 overlay 页 */
@@ -136,7 +142,11 @@ export const VTUBER_DEFAULTS = {
   streamPort: 7792,
   /** VoxCPM2 server;VTS 占 8001,TTS 用 8010 */
   ttsUrl: 'http://127.0.0.1:8010',
-  /** 外置权重与资产；空字符串沿用原来的随包目录约定。 */
+  /** 自备运行时目录;空 = 走面板的托管下载 */
+  ttsRuntimeDir: '',
+  /** 运行时版本;空 = 包里钉住的那个 */
+  ttsRuntimeRelease: '',
+  /** 自定的权重与资产路径;空 = 权重目录下的固定文件名。 */
   ttsBaseLmFile: '',
   ttsAcousticFile: '',
   ttsAlignerLmFile: '',
@@ -350,6 +360,21 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-hot': false,
         description: '默认 http://127.0.0.1:8010(VTS 占了 8001)',
       },
+      'worlds.vtuber.ttsRuntimeDir': {
+        type: 'string',
+        title: 'TTS 运行时目录(自备)',
+        'x-hot': false,
+        'x-path': { kind: 'directory' },
+        description:
+          '留空走面板里的托管下载。填了就用这个目录里的 llama-tts-server,不再下载:'
+          + '自编译的构建、签过名的构建、或者别处装好的一份都走这里。',
+      },
+      'worlds.vtuber.ttsRuntimeRelease': {
+        type: 'string',
+        title: 'TTS 运行时版本',
+        'x-hot': false,
+        description: '留空用包里钉住的那个 release。改了要重新安装运行时。',
+      },
       'worlds.vtuber.ttsBaseLmFile': {
         type: 'string',
         title: 'VoxCPM2 BaseLM',
@@ -357,13 +382,13 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-path': {
           kind: 'file',
           extensions: ['.gguf'],
-          recommendedDir: '../Cortico-Resources/models/vtuber-tts',
+          recommendedDir: '<模型根>/vtuber',
         },
         'x-download': {
-          href: 'https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/resolve/169f64d8b98bbaab1761e4ca3a83e6af653456cc/VoxCPM2-BaseLM-Q8_0.gguf?download=true',
+          href: 'https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/resolve/169f64d8b98bbaab1761e4ca3a83e6af653456cc/VoxCPM2-BaseLM-F16.gguf?download=true',
           label: '下载 GGUF',
         },
-        description: '留空沿用 voxcpm2-server/models/VoxCPM2-BaseLM-Q8_0.gguf。已运行的服务需停掉再启动。',
+        description: '留空用权重目录下的 VoxCPM2-BaseLM-F16(面板可一键下载)。gguf。已运行的服务需停掉再启动。',
       },
       'worlds.vtuber.ttsAcousticFile': {
         type: 'string',
@@ -372,13 +397,13 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-path': {
           kind: 'file',
           extensions: ['.gguf'],
-          recommendedDir: '../Cortico-Resources/models/vtuber-tts',
+          recommendedDir: '<模型根>/vtuber',
         },
         'x-download': {
           href: 'https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/resolve/169f64d8b98bbaab1761e4ca3a83e6af653456cc/VoxCPM2-Acoustic-F16.gguf?download=true',
           label: '下载 GGUF',
         },
-        description: '留空沿用 voxcpm2-server/models/VoxCPM2-Acoustic-F16.gguf。已运行的服务需停掉再启动。',
+        description: '留空用权重目录下的 VoxCPM2-Acoustic-F16(面板可一键下载)。gguf。已运行的服务需停掉再启动。',
       },
       'worlds.vtuber.ttsAlignerLmFile': {
         type: 'string',
@@ -387,14 +412,14 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-path': {
           kind: 'file',
           extensions: ['.gguf'],
-          recommendedDir: '../Cortico-Resources/models/vtuber-tts',
+          recommendedDir: '<模型根>/vtuber',
         },
         'x-download': {
           href: 'https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf/tree/c07281df297b9905d24a508279258cccf987a064',
           label: '下载源权重并转换',
         },
         description:
-          '可选。留空按旧文件名查找 Q8_0 或 F16 GGUF；上游只有 safetensors，需运行 scripts/aligner-gguf.ts 转换。',
+          '可选。留空用权重目录下的 Qwen3-Aligner-LM-F16(面板可一键下载)。gguf；上游只有 safetensors，需运行 scripts/aligner-gguf.ts 转换。',
       },
       'worlds.vtuber.ttsAlignerAudioFile': {
         type: 'string',
@@ -403,7 +428,7 @@ export const VTUBER_CONFIG_GROUP: ConfigGroup = {
         'x-path': {
           kind: 'file',
           extensions: ['.gguf'],
-          recommendedDir: '../Cortico-Resources/models/vtuber-tts',
+          recommendedDir: '<模型根>/vtuber',
         },
         'x-download': {
           href: 'https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf/tree/c07281df297b9905d24a508279258cccf987a064',
@@ -703,6 +728,10 @@ export interface VtuberWorldOptions {
   /** 演出流服务的偏好端口(0 = 随机空闲口;测试用) */
   streamPort?: number;
   ttsUrl?: string;
+  /** 自备的运行时目录;非空就不走托管下载(自编译、签过名的构建走这里) */
+  ttsRuntimeDir?: () => string;
+  /** 托管下载钉住的 release;留空用包里钉的那个 */
+  ttsRuntimeRelease?: () => string;
   /** 输出设备名子串;开流时求值('' 默认设备 / 'none' 不出声) */
   audioDevice?: () => string;
   /** 副输出开关;开流时求值 */
@@ -735,14 +764,12 @@ export interface VtuberWorldOptions {
   yieldWindowMs?: () => number;
   /** 礼让收束的音量淡出时长(ms);每次打断求值(x-hot) */
   yieldFadeMs?: () => number;
-  /** voxcpm2-server 包目录；随包运行时只从这里读取 bin/。 */
-  ttsServerDir?: string;
-  /** 外置 TTS/对齐 GGUF；空值沿用 ttsServerDir/models 的旧约定。 */
+  /** 自定的 TTS/对齐 GGUF 路径；留空用权重目录下的固定文件名。 */
   ttsBaseLmFile?: () => string;
   ttsAcousticFile?: () => string;
   ttsAlignerLmFile?: () => string;
   ttsAlignerAudioFile?: () => string;
-  /** 外置声线库；空值沿用 ttsServerDir/voices。 */
+  /** 声线库（部署私有资产）；留空放在权重目录旁边。 */
   ttsVoicesDir?: () => string;
   /** VTube Studio 部署目录的记录值； World 不直接加载其中的文件。 */
   live2dDir?: () => string;
@@ -1285,7 +1312,12 @@ export class VtuberWorld implements World {
   /** 本声线是否已经报过一次「估计切到实测」;换声线时随 epoch 复位 */
   private speechRateAnnounced = false;
   private readonly ttsServer: TtsServerManager;
-  private readonly ttsServerDir: string;
+  private readonly runtimeStore: RuntimeStore;
+  private readonly modelStore: ModelStore;
+  /** 本平台的发布计划;null = 没有现成构建,只能自备目录 */
+  private readonly releasePlan: ReleasePlan | null;
+  private readonly ttsRuntimeDirOpt?: () => string;
+  private readonly ttsRuntimeReleaseOpt?: () => string;
   private readonly ttsVoicesDirOpt?: () => string;
   private readonly live2dDirOpt?: () => string;
   private readonly ttsProfile: TtsProfile;
@@ -1391,11 +1423,17 @@ export class VtuberWorld implements World {
     } catch {
       /* 非法 URL 用默认端口,synth 时自会报错 */
     }
-    this.ttsServerDir = opts.ttsServerDir ?? TTS_SERVER_DIR;
+    this.ttsRuntimeDirOpt = opts.ttsRuntimeDir;
+    this.ttsRuntimeReleaseOpt = opts.ttsRuntimeRelease;
     this.ttsVoicesDirOpt = opts.ttsVoicesDir;
     this.live2dDirOpt = opts.live2dDir;
+    this.releasePlan = planFor(this.runtimeRelease(), defaultBackend());
+    this.runtimeStore = new RuntimeStore(runtimesRoot(), this.log);
+    this.modelStore = new ModelStore(TTS_MODELS_DIR, this.log);
     this.ttsServer = new TtsServerManager({
-      serverDir: this.ttsServerDir,
+      runtimeDir: () => this.runtimeDir(),
+      serverExe: () => this.releasePlan?.serverExe ?? (process.platform === 'win32' ? 'llama-tts-server.exe' : 'llama-tts-server'),
+      modelsDir: TTS_MODELS_DIR,
       baseLmFile: opts.ttsBaseLmFile,
       acousticFile: opts.ttsAcousticFile,
       alignerLmFile: opts.ttsAlignerLmFile,
@@ -1611,6 +1649,61 @@ export class VtuberWorld implements World {
     });
   }
 
+  /** 托管下载钉住的版本;配置可覆盖 */
+  private runtimeRelease(): string {
+    return this.ttsRuntimeReleaseOpt?.().trim() || PINNED_RELEASE;
+  }
+
+  /** 自备目录优先(自编译、签过名的构建走这里);否则用托管装好的那份,没装就是空串 */
+  private runtimeDir(): string {
+    const own = this.ttsRuntimeDirOpt?.().trim();
+    if (own) return own;
+    if (!this.releasePlan) return '';
+    const dir = this.runtimeStore.dir(this.runtimeRelease(), this.releasePlan);
+    return this.runtimeStore.installed(dir) ? dir : '';
+  }
+
+  /** 控制台的运行时面板 */
+  ttsRuntimeState(): {
+    release: string;
+    key: string | null;
+    dir: string;
+    /** 目录是配置给的还是托管装的 */
+    own: boolean;
+    supported: boolean;
+    install: InstallState;
+  } {
+    const own = (this.ttsRuntimeDirOpt?.().trim() ?? '').length > 0;
+    const release = this.runtimeRelease();
+    const dir = this.releasePlan ? this.runtimeStore.dir(release, this.releasePlan) : '';
+    return {
+      release,
+      key: this.releasePlan?.key ?? null,
+      dir: own ? this.runtimeDir() : dir,
+      own,
+      supported: this.releasePlan !== null,
+      install: own
+        ? { phase: 'installed', file: null, done: 0, total: null, detail: null }
+        : this.runtimeStore.state(dir),
+    };
+  }
+
+  /** 控制台的权重面板 */
+  ttsModelStates(): ModelState[] {
+    return this.modelStore.states();
+  }
+
+  async installTtsRuntime(): Promise<void> {
+    if (!this.releasePlan) {
+      throw new Error(`这个平台(${process.platform})没有现成的构建,请在配置里给出自备的运行时目录`);
+    }
+    await this.runtimeStore.install(this.runtimeRelease(), this.releasePlan);
+  }
+
+  async downloadTtsModel(id: ModelId): Promise<void> {
+    await this.modelStore.download(id);
+  }
+
   private alignOn(): boolean {
     return this.alignEnabled?.() ?? VTUBER_DEFAULTS.alignEnabled;
   }
@@ -1767,11 +1860,20 @@ export class VtuberWorld implements World {
     return this.streamOk === true;
   }
 
+  /**
+   * 流式能力直接问端点:送一个缺 input 的请求,404 说明这个 server 没有流式路由,
+   * 其他回码(参数错)说明路由在。不靠 /health 里的自述标志,那样每换一个后端都要它配合。
+   */
   private async probeStreaming(): Promise<void> {
     try {
-      const res = await fetch(`${this.ttsUrl}/health`, { signal: AbortSignal.timeout(1500) });
-      const body = (await res.json()) as { streaming?: boolean };
-      this.streamOk = body.streaming === true;
+      const res = await fetch(`${this.ttsUrl}/v1/audio/speech/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(1500),
+      });
+      void res.body?.cancel();
+      this.streamOk = res.status !== 404;
     } catch {
       this.streamOk = null;
     }
@@ -2330,8 +2432,9 @@ export class VtuberWorld implements World {
     };
   }
 
+  /** 参考音频是部署私有资产,不是模型;留空就放在权重目录旁边 */
   private voicesDir(): string {
-    return this.ttsVoicesDirOpt?.().trim() || join(this.ttsServerDir, 'voices');
+    return this.ttsVoicesDirOpt?.().trim() || join(TTS_MODELS_DIR, 'voices');
   }
 
   /** 裸文件名 → voices/ 下的绝对路径;带路径分隔符的一律拒绝 */
@@ -2362,12 +2465,11 @@ export class VtuberWorld implements World {
     let wav: Uint8Array = bytes;
     let converted: string | null = null;
     if (format !== 'wav') {
-      const ffmpeg = findFfmpeg(this.ttsServerDir);
+      const ffmpeg = findFfmpeg();
       if (!ffmpeg) {
         throw new Error(
           `${formatLabel(format)} 要转成 wav 才能进声线库,但本机找不到 ffmpeg。` +
-            `装一个加进 PATH,或把 ${FFMPEG_EXE} 放进 ${join(this.ttsServerDir, 'bin')};` +
-            `也可以自己先转成 wav 再导入。`,
+            `装一个加进 PATH,也可以自己先转成 wav 再导入。`,
         );
       }
       wav = await transcodeToWav(bytes, { ffmpeg, sourceExt: format ?? undefined });

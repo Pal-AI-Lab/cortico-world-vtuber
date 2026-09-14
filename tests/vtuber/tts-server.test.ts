@@ -57,7 +57,7 @@ describe('TtsServerManager', () => {
     // Node 测试夹具替代服务端二进制,仅实现 /health。
     const script = `require('node:http').createServer((req,res)=>{res.end('{"ok":true}')}).listen(${port},'127.0.0.1')`;
     mgr = new TtsServerManager({
-      serverDir: 'unused',
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
       port,
       log: nullLogger(),
       commandOverride: { command: process.execPath, args: ['-e', script] },
@@ -79,7 +79,7 @@ describe('TtsServerManager', () => {
     const port = await freePort();
     const logs: LogLine[] = [];
     mgr = new TtsServerManager({
-      serverDir: 'unused',
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
       port,
       log: recordingLogger('worlds.vtuber', (line) => logs.push(line)),
       commandOverride: {
@@ -104,7 +104,7 @@ describe('TtsServerManager', () => {
   it('缺 bin/models → 同步 error,不 spawn', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tts-empty-'));
     try {
-      mgr = new TtsServerManager({ serverDir: dir, port: 8010, log: nullLogger() });
+      mgr = new TtsServerManager({ runtimeDir: () => dir, serverExe: () => 'llama-tts-server.exe', modelsDir: join(dir, 'models'), port: 8010, log: nullLogger() });
       const st = mgr.start();
       expect(st.phase).toBe('error');
       expect(st.detail).toContain('缺文件');
@@ -120,7 +120,7 @@ describe('TtsServerManager', () => {
     spawnStub.throwUnknown = true;
     try {
       mgr = new TtsServerManager({
-        serverDir: 'unused',
+        runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
         port: 8011,
         log: nullLogger(),
         commandOverride: { command: 'C:\\blocked\\llama-tts-server.exe', args: [] },
@@ -141,7 +141,7 @@ describe('TtsServerManager', () => {
     const port = await freePort();
     const script = `require('node:http').createServer((req,res)=>{res.end('ok')}).listen(${port},'127.0.0.1')`;
     mgr = new TtsServerManager({
-      serverDir: 'unused',
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
       port,
       log: nullLogger(),
       commandOverride: { command: process.execPath, args: ['-e', script] },
@@ -154,16 +154,18 @@ describe('TtsServerManager', () => {
 });
 
 describe('TtsServerManager 启动参数', () => {
-  /** 造一个只有 bin/models 骨架的 server 目录;文件内容无所谓,resolveLaunch 只看存在性 */
+  /**
+   * 造一个运行时目录加一个权重目录;文件内容无所谓,resolveLaunch 只看存在性。
+   * 运行时目录就是解压后的样子:可执行文件在根上,不再套一层 bin/。
+   */
   function fakeServerDir(withAligner: boolean): string {
     const dir = mkdtempSync(join(tmpdir(), 'ttssrv-'));
-    mkdirSync(join(dir, 'bin'), { recursive: true });
     mkdirSync(join(dir, 'models'), { recursive: true });
-    writeFileSync(join(dir, 'bin', 'llama-tts-server.exe'), '');
-    writeFileSync(join(dir, 'models', 'VoxCPM2-BaseLM-Q8_0.gguf'), '');
+    writeFileSync(join(dir, 'llama-tts-server.exe'), '');
+    writeFileSync(join(dir, 'models', 'VoxCPM2-BaseLM-F16.gguf'), '');
     writeFileSync(join(dir, 'models', 'VoxCPM2-Acoustic-F16.gguf'), '');
     if (withAligner) {
-      writeFileSync(join(dir, 'models', 'Qwen3-Aligner-LM-Q8_0.gguf'), '');
+      writeFileSync(join(dir, 'models', 'Qwen3-Aligner-LM-F16.gguf'), '');
       writeFileSync(join(dir, 'models', 'Qwen3-Aligner-Audio-F16.gguf'), '');
     }
     return dir;
@@ -171,7 +173,7 @@ describe('TtsServerManager 启动参数', () => {
 
   /** 启动即失败(exe 是空文件),但 spawn 用过的 argv 已经落在 state 里可查 */
   const argsOf = (dir: string): string[] => {
-    const mgr = new TtsServerManager({ serverDir: dir, port: 1, log: nullLogger() });
+    const mgr = new TtsServerManager({ runtimeDir: () => dir, serverExe: () => 'llama-tts-server.exe', modelsDir: join(dir, 'models'), port: 1, log: nullLogger() });
     return (mgr as unknown as { resolveLaunch(): { args: string[] } }).resolveLaunch().args;
   };
 
@@ -209,7 +211,7 @@ describe('TtsServerManager 启动参数', () => {
     for (const path of Object.values(files)) writeFileSync(path, 'fixture');
     try {
       const mgr = new TtsServerManager({
-        serverDir: dir,
+        runtimeDir: () => dir, serverExe: () => 'llama-tts-server.exe', modelsDir: join(dir, 'models'),
         port: 1,
         log: nullLogger(),
         baseLmFile: () => files.baseLm,
@@ -240,7 +242,7 @@ describe('TtsServerManager 启动参数', () => {
     const missingAligner = join(dir, 'outside', 'missing-aligner.gguf');
     try {
       const baseMgr = new TtsServerManager({
-        serverDir: dir,
+        runtimeDir: () => dir, serverExe: () => 'llama-tts-server.exe', modelsDir: join(dir, 'models'),
         port: 1,
         log: nullLogger(),
         baseLmFile: () => missingBase,
@@ -251,7 +253,7 @@ describe('TtsServerManager 启动参数', () => {
       });
 
       const alignerMgr = new TtsServerManager({
-        serverDir: dir,
+        runtimeDir: () => dir, serverExe: () => 'llama-tts-server.exe', modelsDir: join(dir, 'models'),
         port: 1,
         log: nullLogger(),
         alignerLmFile: () => missingAligner,
