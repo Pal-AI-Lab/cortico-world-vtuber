@@ -66,7 +66,7 @@ export function planFor(release: string, backend: Backend, platform: NodeJS.Plat
 
   if (platform === 'linux') {
     if (backend !== 'cuda') return null;
-    const key = 'ubuntu-cuda-12.6-x64';
+    const key = 'ubuntu-cuda-12.8-x64';
     return {
       key,
       serverExe: 'llama-tts-server',
