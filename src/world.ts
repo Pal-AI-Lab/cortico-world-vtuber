@@ -698,8 +698,8 @@ export const VTUBER_PANEL_DECLS: readonly WorldPanelDecl[] = [
   {
     id: 'tts',
     title: '声线档案',
-    description: '参考音频、参考转写与生成参数;合成试听。',
-    getMethods: ['state', 'voiceWav'],
+    description: '运行时与权重的安装;参考音频、参考转写与生成参数;合成试听。',
+    getMethods: ['state', 'voiceWav', 'runtime'],
   },
   {
     id: 'align',
@@ -841,6 +841,22 @@ export interface VtuberTtsConsole {
   state(): Promise<
     TtsServerState & { reachable: boolean; profile: TtsProfile; voices: TtsVoiceInfo[]; voicesDir: string }
   >;
+  /** 运行时与权重的安装状态 */
+  runtime(): {
+    release: string;
+    key: string | null;
+    dir: string;
+    /** 目录是配置给的(自备)还是托管装的 */
+    own: boolean;
+    /** 本平台有没有现成的构建 */
+    supported: boolean;
+    install: InstallState;
+    models: ModelState[];
+  };
+  /** 装(或重装)运行时 */
+  installRuntime(): Promise<void>;
+  /** 下一个权重文件 */
+  downloadModel(id: ModelId): Promise<void>;
   start(): TtsServerState;
   stop(): Promise<TtsServerState>;
   /** 改声线档案(部分字段);钳制后持久化(连同转写侧车)并返回生效值 */
@@ -2340,6 +2356,9 @@ export class VtuberWorld implements World {
         voices: this.listVoices(),
         voicesDir: this.voicesDir(),
       }),
+      runtime: () => ({ ...this.ttsRuntimeState(), models: this.ttsModelStates() }),
+      installRuntime: () => this.installTtsRuntime(),
+      downloadModel: (id) => this.downloadTtsModel(id),
       start: () => {
         const state = this.ttsServer.start();
         // server 刚拉起:下一次合成时重探流式能力,不吃 30s 缓存

@@ -142,6 +142,7 @@ export const ttsPanel: ConsolePanel = {
     const saveUrl = urlSlot(ctx);
     card.body.appendChild(player);
 
+    mountRuntimeSection(ctx);
     ctx.root.appendChild(card.el);
 
     // -----------------------------------------------------------------------
@@ -370,6 +371,146 @@ export const ttsPanel: ConsolePanel = {
     void refresh();
   },
 };
+
+/** 面板顶部那块:运行时装没装、四个权重在不在,各带一个下载按钮 */
+interface RuntimePanelState {
+  release: string;
+  key: string | null;
+  dir: string;
+  own: boolean;
+  supported: boolean;
+  install: { phase: string; file: string | null; done: number; total: number | null; detail: string | null };
+  models: {
+    id: string;
+    file: string;
+    path: string;
+    phase: string;
+    bytes: number;
+    done: number;
+    total: number | null;
+    detail: string | null;
+    required: boolean;
+    source: string;
+  }[];
+}
+
+const RUNTIME_DESC =
+  '运行时是 llama-tts-server 的二进制,权重是它加载的 GGUF。两样都不随包发布,'
+  + '这里下到部署根的 runtimes/ 与 models/vtuber/ 下。配置页填了「TTS 运行时目录」就不下载。';
+
+function gb(bytes: number): string {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${Math.round(bytes / 1e6)} MB`;
+}
+
+function progressText(done: number, total: number | null): string {
+  return total ? `${gb(done)} / ${gb(total)}(${Math.round((done / total) * 100)}%)` : gb(done);
+}
+
+function mountRuntimeSection(ctx: ConsolePanelContext): void {
+  const { ui } = ctx;
+  const card = ui.sheet({ title: '运行时与权重', en: 'Runtime', desc: RUNTIME_DESC });
+
+  const msg = ui.msgline('');
+  const chip = ui.chip('—');
+  const btnInstall = ui.button('安装运行时', { size: 'sm', onClick: () => void install() });
+  const head = ui.rowbar();
+  head.append(ui.pill('运行时', 'plain'), chip, msg, ui.h('span', 'grow'), btnInstall);
+  card.body.appendChild(head);
+
+  const dirLine = dimLine(ctx, '');
+  card.body.appendChild(dirLine);
+
+  const rows = ui.h('div');
+  card.body.appendChild(rows);
+  ctx.root.appendChild(card.el);
+
+  /** 有活在跑就提高轮询频率,静止时一次就够 */
+  let busy = false;
+
+  async function refresh(): Promise<void> {
+    let st: RuntimePanelState;
+    try {
+      st = await ctx.invoke<RuntimePanelState>('runtime');
+    } catch (error) {
+      if (!ctx.signal.aborted) setMsg(msg, errText(error), true);
+      return;
+    }
+    if (ctx.signal.aborted) return;
+
+    const phase = st.install.phase;
+    busy = phase === 'downloading' || phase === 'extracting'
+      || st.models.some((m) => m.phase === 'downloading');
+
+    chip.textContent = st.own
+      ? '自备目录'
+      : !st.supported
+        ? '本平台无构建'
+        : phase === 'installed'
+          ? st.release
+          : phase === 'downloading'
+            ? `下载中 ${st.install.file ?? ''} ${progressText(st.install.done, st.install.total)}`
+            : phase === 'extracting'
+              ? `解压中 ${st.install.file ?? ''}`
+              : phase === 'error'
+                ? '装失败'
+                : '未安装';
+    dirLine.textContent = st.dir || '(还没有目录)';
+    btnInstall.disabled = busy || st.own || !st.supported;
+    btnInstall.textContent = phase === 'installed' ? '重装运行时' : '安装运行时';
+    if (st.install.detail) setMsg(msg, st.install.detail, true);
+
+    rows.replaceChildren();
+    for (const m of st.models) {
+      const row = ui.rowbar();
+      const state = m.phase === 'present'
+        ? gb(m.bytes)
+        : m.phase === 'downloading'
+          ? progressText(m.done, m.total)
+          : m.phase === 'error'
+            ? (m.detail ?? '下载失败')
+            : '未下载';
+      const btn = ui.button('下载', {
+        size: 'sm',
+        onClick: () => void download(m.id, m.file),
+      });
+      btn.disabled = busy || m.phase === 'present';
+      row.append(
+        ui.pill(m.required ? '必需' : '选配', 'plain'),
+        ui.chip(m.file),
+        ui.h('span', '', state),
+        ui.h('span', 'grow'),
+        btn,
+      );
+      rows.appendChild(row);
+      rows.appendChild(dimLine(ctx, m.source));
+    }
+  }
+
+  async function install(): Promise<void> {
+    setMsg(msg, '开始安装,压缩包几百 MB,别关页面');
+    try {
+      await ctx.invoke('installRuntime');
+      setMsg(msg, '运行时装好了');
+    } catch (error) {
+      setMsg(msg, errText(error), true);
+    }
+    void refresh();
+  }
+
+  async function download(id: string, file: string): Promise<void> {
+    setMsg(msg, `开始下载 ${file}`);
+    try {
+      await ctx.invoke('downloadModel', [id]);
+      setMsg(msg, `${file} 下好了`);
+    } catch (error) {
+      setMsg(msg, errText(error), true);
+    }
+    void refresh();
+  }
+
+  ctx.interval(() => { if (busy) void refresh(); }, 1000);
+  void refresh();
+}
 
 /** tts-<文本前几个字>-<时间戳>.wav;文件名里非法的字符全去掉 */
 function testWavName(text: string): string {

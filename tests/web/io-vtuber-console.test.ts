@@ -58,7 +58,7 @@ describe('VTuber 的面板声明', () => {
       model: ['state'],
       overlay: ['state'],
       clips: ['state'],
-      tts: ['state', 'voiceWav'],
+      tts: ['state', 'voiceWav', 'runtime'],
       align: ['state', 'units'],
       log: ['entries'],
       diag: ['state', 'report', 'presets'],
@@ -108,7 +108,7 @@ describe('invoke 按局部 id 分派', () => {
   it('tts / align 的方法名与语义一字未改:白名单内放行到引擎,白名单外仍然拦', async () => {
     const c = contribution(proxy());
     // 引擎没起来 = 报"子进程未运行";重点是它**进得去分派**,不是"未知面板"
-    for (const m of ['state', 'start', 'stop', 'setProfile', 'saveVoice', 'voiceWav', 'test']) {
+    for (const m of ['state', 'runtime', 'installRuntime', 'downloadModel', 'start', 'stop', 'setProfile', 'saveVoice', 'voiceWav', 'test']) {
       await expect(c.invoke!('tts', m, [])).rejects.toThrow('子进程未运行');
     }
     for (const m of ['state', 'units', 'align', 'synth']) {
