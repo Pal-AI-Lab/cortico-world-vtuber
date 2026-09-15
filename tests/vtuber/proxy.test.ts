@@ -74,6 +74,29 @@ function waitFor(cond: () => boolean, timeoutMs = 8000): Promise<void> {
   });
 }
 
+describe('传给子进程的一次性载荷', () => {
+  /**
+   * World 跑在子进程里,配置里的函数过不去。运行时目录与版本漏在 EngineInit 外面的话,
+   * 子进程拿到空串,TTS 起不来只报一句「缺文件(TTS server):」后面什么都没有。
+   */
+  it('运行时目录与版本进 EngineInit', () => {
+    const proxy = new VtuberWorldProxy({
+      ttsRuntimeDir: () => 'D:\\rt\\bin',
+      ttsRuntimeRelease: () => 'tts-b64d092c-1',
+    });
+    const init = (proxy as unknown as { buildInit(): { ttsRuntimeDir: string; ttsRuntimeRelease: string } }).buildInit();
+    expect(init.ttsRuntimeDir).toBe('D:\\rt\\bin');
+    expect(init.ttsRuntimeRelease).toBe('tts-b64d092c-1');
+  });
+
+  it('没配就是空串,由 World 那边决定走托管下载', () => {
+    const proxy = new VtuberWorldProxy({});
+    const init = (proxy as unknown as { buildInit(): { ttsRuntimeDir: string; ttsRuntimeRelease: string } }).buildInit();
+    expect(init.ttsRuntimeDir).toBe('');
+    expect(init.ttsRuntimeRelease).toBe('');
+  });
+});
+
 describe('VtuberWorldProxy(演出引擎子进程)', () => {
   let host: FakeHost;
   let tts: Server;

@@ -52,6 +52,10 @@ export interface EngineInit {
   vtsWsUrl: string;
   streamPort: number;
   ttsUrl: string;
+  /** 自备运行时目录;空串 = 走托管下载 */
+  ttsRuntimeDir: string;
+  /** 运行时版本;空串 = 包里钉住的那个 */
+  ttsRuntimeRelease: string;
   /** 演出包目录;null = 范例包 */
   packDir: string | null;
   diagDir: string | null;
