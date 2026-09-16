@@ -49,7 +49,8 @@ corepack pnpm build
 
 `tsconfig.json` 的 `paths` 与 `vitest.config.ts` 的 `resolve.alias` 都把 `cortico/*` 指向
 `../BOT/src/`——也就是**与本目录同级的框架 checkout**。框架放在别处时改这两处(它们必须
-同步)。生产里不靠这两条:那时解析由框架的模块钩子完成。
+同步),或在本目录同级放一个名为 `BOT` 的链接指向那份 checkout。生产里不靠这两条:那时解析
+由框架的模块钩子完成。
 
 ```bash
 corepack pnpm typecheck   # tsc --noEmit,Node 侧与浏览器侧一份配置一起 check
@@ -57,13 +58,19 @@ corepack pnpm test        # vitest run
 corepack pnpm build       # esbuild → dist/console.{js,css}
 ```
 
+改完面板要让浏览器**硬刷新**(Ctrl+Shift+R)。扩展产物的 URL 里只有包版本
+(`/assets/extensions/<包名>/<版本>/console.js`),宿主对它发的是 `immutable` 的一年缓存;
+版本没变时浏览器不会去问服务端,重启 Cortico 也换不掉页面里那一份。开发期开着 DevTools
+的 "Disable cache" 也可以。
+
 测试全程 mock:不连 VTube Studio、不起真 TTS server、不开声卡。构建脚本**不给
 `cortico/*` 配 alias 也不 external**——报 "Could not resolve cortico/…" 就说明浏览器侧
 漏了一处运行时依赖,去把它本地化,不要在构建里放行。
 
-## TTS 运行时与权重
+## TTS 服务
 
-World 不带二进制也不带权重,控制台的 TTS 面板负责把它们取来:
+TTS服务部分默认支持OpenAI Speech标准的TTS服务端口，您可以接入任何您希望的TTS服务！
+当然，我们也提供了支持的Voxcpm2默认服务，您可以通过以下的方式安装：
 
 - **运行时**装到 `<运行时根>/llama.cpp-omni/<release>/<平台后端>/`。二进制来自
   [Phantivia/llama.cpp-omni](https://github.com/Phantivia/llama.cpp-omni) 的 `tts-*` release
@@ -84,6 +91,7 @@ tsx scripts/check-tts-runtime.ts
 默认装在 `scratch/tts-runtime-check/` 下,不碰真部署。
 
 对齐器缺席时 TTS 照常,只是没有逐字时间点,字幕与锚点回落按字符比例估计。
+
 
 ## 第三方资产
 

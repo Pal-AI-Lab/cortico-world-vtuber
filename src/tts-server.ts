@@ -50,7 +50,7 @@ export interface TtsServerOptions {
   acousticFile?: () => string;
   alignerLmFile?: () => string;
   alignerAudioFile?: () => string;
-  port: number;
+  port: number | (() => number);
   host?: string;
   nGpuLayers?: number;
   log: Logger;
@@ -80,6 +80,7 @@ export class TtsServerManager {
   private readonly host: string;
   private proc: ChildProcess | null = null;
   private phase: TtsServerPhase = 'stopped';
+  private startedPort: number | null = null;
   private detail: string | null = null;
   private stderrTail = '';
   private healthTimer: ReturnType<typeof setInterval> | null = null;
@@ -91,15 +92,21 @@ export class TtsServerManager {
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
+  private configuredPort(): number {
+    return typeof this.opts.port === 'function' ? this.opts.port() : this.opts.port;
+  }
+
   get url(): string {
-    return `http://${this.host}:${this.opts.port}`;
+    return `http://${this.host}:${this.startedPort ?? this.configuredPort()}`;
   }
 
   state(): TtsServerState {
     return {
       phase: this.phase,
       url: this.url,
-      detail: this.detail,
+      detail: this.detail ?? (this.proc && this.startedPort !== this.configuredPort()
+        ? 'TTS 端口配置已修改；停止后再启动本地 TTS，才会使用新端口。'
+        : null),
       pid: this.proc?.pid ?? null,
       resources: this.resolveResources(),
     };
@@ -108,6 +115,7 @@ export class TtsServerManager {
   /** 拉起进程并开始 health 轮询;已在跑则原样返回。同步返回,结果看 state()。 */
   start(): TtsServerState {
     if (this.phase === 'starting' || this.phase === 'running') return this.state();
+    this.startedPort = this.configuredPort();
     const launch = this.resolveLaunch();
     if ('error' in launch) {
       this.phase = 'error';
@@ -165,6 +173,7 @@ export class TtsServerManager {
     const proc = this.proc;
     this.proc = null;
     this.phase = 'stopped';
+    this.startedPort = null;
     this.detail = null;
     if (proc && proc.exitCode === null) {
       proc.kill();
@@ -243,7 +252,7 @@ export class TtsServerManager {
     }
     const args = [
       '--host', this.host,
-      '--port', String(this.opts.port),
+      '--port', String(this.startedPort ?? this.configuredPort()),
       '--voxcpm2-base-lm', resources.baseLm.path,
       '--voxcpm2-acoustic', resources.acoustic.path,
       '--voxcpm2-n-gpu-layers', String(this.opts.nGpuLayers ?? -1),

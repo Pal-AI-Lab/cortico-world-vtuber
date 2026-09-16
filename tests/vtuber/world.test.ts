@@ -277,17 +277,18 @@ describe('VtuberWorld 停机次序', () => {
 });
 
 describe('VTuber 外置资源配置', () => {
-  it('默认留空,配置声明提供对应的本机选择器', () => {
-    const keys = [
-      'ttsBaseLmFile',
-      'ttsAcousticFile',
-      'ttsAlignerLmFile',
-      'ttsAlignerAudioFile',
-      'ttsVoicesDir',
-      'live2dDir',
-    ] as const;
-    for (const key of keys) {
+  it('TTS 的本机路径选择器归「声线档案」页;通用参数页只留形象与演出包的目录', () => {
+    /*
+     * TTS 的地址、运行时、权重与声线库现在属于 `worlds.vtuber.tts` 里那条服务。
+     * 通用参数页再声明一份同名旋钮就会变成第二个可写入口,两处各自覆盖、写回也
+     * 无从判定谁赢,所以那几项只在「声线档案」页提供 `ctx.pickPath` 选择器。
+     */
+    for (const key of ['ttsBaseLmFile', 'ttsAcousticFile', 'ttsAlignerLmFile', 'ttsAlignerAudioFile', 'ttsVoicesDir'] as const) {
       expect(VTUBER_DEFAULTS[key]).toBe('');
+      expect(VTUBER_CONFIG_GROUP.schema.properties[`worlds.vtuber.${key}`]).toBeUndefined();
+    }
+    // 形象与演出包不属于 TTS 配置,仍由这一页给出本机选择器
+    for (const key of ['live2dDir', 'packDir'] as const) {
       expect(VTUBER_CONFIG_GROUP.schema.properties[`worlds.vtuber.${key}`]?.['x-path']).toBeDefined();
     }
   });
@@ -1093,10 +1094,17 @@ describe('VtuberWorld', () => {
     expect(out.message).toContain('声卡');
     // wav 带回面板就地播放;声卡侧经 DeviceAudioSink 同步播出
     expect(out.wav).toBeTruthy();
-    // 假 TTS server 对 /health 也回 200 → reachable
+    // 内置 legacy 服务由 World 管本地进程:假 TTS server 对 /health 回 200 → reachable
     const st = await c.state();
-    expect(st.reachable).toBe(true);
-    expect(st.phase).toBe('stopped');
+    expect(st.managed).toBe(true);
+    expect(st.legacy).toBe(true);
+    // 面板按这个 id 判定声线档案归谁:内置条目就是带 legacy 段的那一条
+    expect(st.builtinServiceId).toBe('legacy-default');
+    expect(st.local?.reachable).toBe(true);
+    expect(st.local?.phase).toBe('stopped');
+    // 没有新配置时服务表是内存里的虚拟 legacy 条目,读操作不改盘
+    expect(st.registry.services.map((s) => s.id)).toEqual(['legacy-default']);
+    expect(st.registry.activeServiceId).toBe('legacy-default');
   });
 
   it('声线档案:voices 列举带转写;setProfile 钳制并持久化;合成请求携带参考音频与参数', async () => {

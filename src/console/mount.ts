@@ -7,12 +7,13 @@ import type {
   ConsolePanelContext,
   ConsolePanel,
 } from 'cortico/web/shared/client-panel.ts';
-import { errText, setMsg, type MountState, type TtsState, type VtsState } from './client.ts';
+import { errText, setMsg, type MountState, type TtsMountState, type VtsState } from './client.ts';
 
 /** 等 TTS 权重加载的轮询:每 2 秒问一次,最多 90 拍(3 分钟) */
 const TTS_POLL_MS = 2000;
 const TTS_POLL_TICKS = 90;
 
+/** managed 服务的本地进程阶段;external 服务不走这张表。 */
 const TTS_TONE: Record<string, RowTone> = {
   running: 'on',
   starting: 'warn',
@@ -90,26 +91,49 @@ export const mountPanel: ConsolePanel = {
       btnTest.disabled = !st.connected;
     };
 
-    const renderTts = (st: TtsState | null): void => {
+    /**
+     * 声音那行。external 服务没有本地进程可看可启停,`local` 为 null 不是错误:
+     * 那一行只报当前服务名与「已应用 / 待应用」,启停按钮藏起来。
+     */
+    const renderTts = (st: TtsMountState | null): void => {
       if (!st) {
         ttsRow.set('plain', '不可用');
         return;
       }
-      const missing = st.resources
+      const revision = st.pendingApply ? '待应用' : '已应用';
+      if (!st.managed || !st.local) {
+        ttsRow.set(
+          'plain',
+          st.pendingApply ? '待应用' : '外部服务',
+          [`服务 ${st.serviceName}`, st.protocol, revision, st.url].filter(Boolean).join(' · '),
+        );
+        btnStart.hidden = true;
+        btnStop.hidden = true;
+        return;
+      }
+      btnStart.hidden = false;
+      btnStop.hidden = false;
+      const res = st.local.resources;
+      const missing = res
         ? [
-            !st.resources.server.ready ? '运行时' : '',
-            !st.resources.baseLm.ready ? 'BaseLM' : '',
-            !st.resources.acoustic.ready ? 'Acoustic' : '',
-            st.resources.alignerRequired && !st.resources.alignerLm.ready ? 'Aligner LM' : '',
-            st.resources.alignerRequired && !st.resources.alignerAudio.ready ? 'Aligner Audio' : '',
+            !res.server.ready ? '运行时' : '',
+            !res.baseLm.ready ? 'BaseLM' : '',
+            !res.acoustic.ready ? 'Acoustic' : '',
+            res.alignerRequired && !res.alignerLm.ready ? 'Aligner LM' : '',
+            res.alignerRequired && !res.alignerAudio.ready ? 'Aligner Audio' : '',
           ].filter(Boolean)
         : [];
       ttsRow.set(
         TTS_TONE[st.phase] ?? 'plain',
         TTS_WORD[st.phase] ?? st.phase,
-        [st.pid ? `pid ${st.pid}` : null, st.url, missing.length ? `缺 ${missing.join(' / ')}` : null, st.detail]
-          .filter(Boolean)
-          .join(' · '),
+        [
+          st.serviceName,
+          st.pid ? `pid ${st.pid}` : null,
+          st.url,
+          revision,
+          missing.length ? `缺 ${missing.join(' / ')}` : null,
+          st.detail,
+        ].filter(Boolean).join(' · '),
       );
       btnStart.disabled = st.phase === 'starting' || st.phase === 'running';
       btnStop.disabled = st.phase === 'stopped' && !st.pid;
@@ -165,12 +189,14 @@ export const mountPanel: ConsolePanel = {
           }
           if (probing) return; // 上一拍还没回来,不叠着发
           probing = true;
-          void ctx.invoke<TtsState>('ttsState').then(
+          void ctx.invoke<TtsMountState>('ttsState').then(
             (st) => {
               probing = false;
               renderTts(st);
+              // 换成 external 服务后没有本地进程可等;那不算失败
               if (st.phase === 'starting') return;
-              done(st.phase === 'running' ? '声音就绪' : `[失败] 声音 ${st.detail || st.phase}`);
+              if (st.managed && st.local) done(st.phase === 'running' ? '声音就绪' : `[失败] 声音 ${st.detail || st.phase}`);
+              else done(`声音切到 ${st.serviceName}`);
             },
             () => { probing = false; }, // 还没回来,下一拍再问
           );
@@ -212,7 +238,7 @@ export const mountPanel: ConsolePanel = {
       void (async () => {
         say('启动中…(首次要加载权重)');
         try {
-          renderTts(await ctx.invoke<TtsState>('ttsStart'));
+          renderTts(await ctx.invoke<TtsMountState>('ttsStart'));
           say(await waitTtsReady());
         } catch (err) {
           say(`启动失败: ${errText(err)}`, true);
@@ -226,7 +252,7 @@ export const mountPanel: ConsolePanel = {
       void (async () => {
         say('');
         try {
-          renderTts(await ctx.invoke<TtsState>('ttsStop'));
+          renderTts(await ctx.invoke<TtsMountState>('ttsStop'));
           say('已停止');
         } catch (err) {
           say(`停止失败: ${errText(err)}`, true);
@@ -259,9 +285,12 @@ export const mountPanel: ConsolePanel = {
         say('挂载中…(VTS 弹窗时去点允许)');
         try {
           const st = await ctx.invoke<MountState>('state');
-          const ttsJob = st.tts?.phase === 'running'
-            ? Promise.resolve('声音已在运行')
-            : ctx.invoke<TtsState>('ttsStart').then(waitTtsReady);
+          // 外部服务没有本机进程可拉:那种情况下"挂载"这一半是空动作
+          const ttsJob = !st.tts?.managed
+            ? Promise.resolve(`声音用外部服务 ${st.tts?.serviceName ?? '(没有服务)'}`)
+            : st.tts?.phase === 'running'
+              ? Promise.resolve('声音已在运行')
+              : ctx.invoke<TtsMountState>('ttsStart').then(waitTtsReady);
           const vtsJob = st.vts?.connected
             ? Promise.resolve('形象已连接')
             : ctx.invoke('vtsConnect').then(() => '形象已连接');

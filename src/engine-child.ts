@@ -23,6 +23,7 @@ import type {
   MainToChild,
   SlimEvent,
 } from './engine-ipc.ts';
+import type { TtsRegistryRead } from './tts/config.ts';
 import type {
   EventEnvelope,
   EventStoreReader,
@@ -139,6 +140,9 @@ let tap: OutputTap | null = null;
 let tools = new Map<string, ToolDef>();
 let panels: Record<EnginePanel, Record<string, unknown>> | null = null;
 let snap: EngineConfigSnapshot = {};
+/** 当前应用的 TTS 注册表与密钥;热 apply 时整份替换 */
+let ttsRegistry: TtsRegistryRead | null = null;
+let ttsSecrets: Record<string, string> = {};
 let statusTimer: ReturnType<typeof setInterval> | null = null;
 let lastStatus = '';
 let shuttingDown = false;
@@ -166,26 +170,18 @@ function configGetters(initial: EngineConfigSnapshot): Partial<VtuberWorldOption
   if ('yieldFadeMs' in initial) out.yieldFadeMs = () => snap.yieldFadeMs as number;
   if ('decaySec' in initial) out.decaySec = () => snap.decaySec as NonNullable<EngineConfigSnapshot['decaySec']>;
   if ('modelProfile' in initial) out.modelProfile = () => snap.modelProfile as string;
-  if ('ttsBaseLmFile' in initial) {
-    out.ttsBaseLmFile = () => snap.ttsBaseLmFile ?? VTUBER_DEFAULTS.ttsBaseLmFile;
-  }
-  if ('ttsAcousticFile' in initial) {
-    out.ttsAcousticFile = () => snap.ttsAcousticFile ?? VTUBER_DEFAULTS.ttsAcousticFile;
-  }
-  if ('ttsAlignerLmFile' in initial) {
-    out.ttsAlignerLmFile = () => snap.ttsAlignerLmFile ?? VTUBER_DEFAULTS.ttsAlignerLmFile;
-  }
-  if ('ttsAlignerAudioFile' in initial) {
-    out.ttsAlignerAudioFile = () => snap.ttsAlignerAudioFile ?? VTUBER_DEFAULTS.ttsAlignerAudioFile;
-  }
-  if ('ttsVoicesDir' in initial) {
-    out.ttsVoicesDir = () => snap.ttsVoicesDir ?? VTUBER_DEFAULTS.ttsVoicesDir;
-  }
   if ('live2dDir' in initial) out.live2dDir = () => snap.live2dDir ?? VTUBER_DEFAULTS.live2dDir;
   return out;
 }
 
 async function handleInit(init: EngineInit): Promise<EngineReady> {
+  /*
+   * 注册表与密钥在子进程里各留一份可变引用:热 apply 时整份替换,World 通过
+   * getter 现读,所以下一片合成用的就是新版本。init 带的是主进程此刻的最新配置,
+   * 不是 Proxy 构造时的旧副本。
+   */
+  ttsRegistry = init.ttsRegistry;
+  ttsSecrets = init.ttsSecrets ?? {};
   const m = new VtuberWorld({
     timezone: init.timezone,
     botName: init.botName,
@@ -199,6 +195,8 @@ async function handleInit(init: EngineInit): Promise<EngineReady> {
     ...(init.vtsAuthToken ? { vtsAuthToken: init.vtsAuthToken } : {}),
     ...(init.ttsProfile ? { ttsProfile: init.ttsProfile } : {}),
     ...(init.overlay ? { overlay: init.overlay } : {}),
+    ttsRegistry: () => ttsRegistry,
+    ttsSecrets: () => ttsSecrets,
     onTtsProfile: (profile) => send({ t: 'note', note: { kind: 'tts-profile', profile } }),
     onOverlayConfig: (config) => send({ t: 'note', note: { kind: 'overlay-config', config } }),
     onVtsToken: (token) => send({ t: 'note', note: { kind: 'vts-token', token } }),
@@ -258,6 +256,12 @@ async function handleRequest(req: EngineRequest, signal: AbortSignal): Promise<u
     return null;
   }
   if (!mod) throw new Error('演出引擎还没 init');
+  if (req.kind === 'tts-apply') {
+    // 密钥不进任何广播与日志;这里只整份替换本进程持有的那两份引用
+    ttsRegistry = req.registry;
+    ttsSecrets = req.secrets ?? {};
+    return mod.applyTtsRegistry(req.registry);
+  }
   if (req.kind === 'tool') {
     const tool = tools.get(req.name);
     if (!tool) throw new Error(`未知工具「${req.name}」`);

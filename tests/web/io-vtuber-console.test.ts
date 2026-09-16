@@ -40,7 +40,7 @@ describe('VTuber 的面板声明', () => {
     expect(panels.map((p) => p.id)).toEqual(PANEL_IDS);
     expect(panels.map((p) => p.title)).toEqual([
       '挂载', '模型档案', 'Overlay 画面', '动作调参',
-      '声线档案', '时间点标注', '演出日志', '演出诊断',
+      'TTS', '时间点标注', '演出日志', '演出诊断',
     ]);
     for (const p of panels) expect(p.description).toBeTruthy();
   });
@@ -58,7 +58,7 @@ describe('VTuber 的面板声明', () => {
       model: ['state'],
       overlay: ['state'],
       clips: ['state'],
-      tts: ['state', 'voiceWav', 'runtime'],
+      tts: ['state', 'voiceWav', 'runtime', 'services'],
       align: ['state', 'units'],
       log: ['entries'],
       diag: ['state', 'report', 'presets'],
