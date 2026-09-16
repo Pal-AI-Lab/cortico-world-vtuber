@@ -15,11 +15,15 @@ import type { StreamEvent } from 'cortico/protocol/open-responses/index.ts';
 import type { LogNote } from 'cortico/core/ipc-logger.ts';
 import type { EventEnvelope, LLMUsage, PushOptions } from 'cortico/core/types.ts';
 import type { WorldConsoleDecl } from 'cortico/core/types.ts';
+import type { TtsRegistryRead } from './tts/config.ts';
 import type { OverlayConfig, TtsProfile, VtuberDecaySec } from './world.ts';
 
 /**
  * x-hot 配置的取值快照。键缺席 = 装配层没提供那个 getter(子进程用 World 默认值);
  * 键的在场集在 init 时定死,之后的快照只更新取值。
+ *
+ * TTS 的地址、运行时、权重与声线不在这里:它们随 `tts` 注册表整份 apply,
+ * 用一秒一次的采样推会和服务切换抢同一个权威版本。
  */
 export interface EngineConfigSnapshot {
   audioDevice?: string;
@@ -37,11 +41,6 @@ export interface EngineConfigSnapshot {
   yieldFadeMs?: number;
   decaySec?: VtuberDecaySec;
   modelProfile?: string;
-  ttsBaseLmFile?: string;
-  ttsAcousticFile?: string;
-  ttsAlignerLmFile?: string;
-  ttsAlignerAudioFile?: string;
-  ttsVoicesDir?: string;
   live2dDir?: string;
 }
 
@@ -51,10 +50,11 @@ export interface EngineInit {
   botName: string;
   vtsWsUrl: string;
   streamPort: number;
+  /** 旧服务根;注册表读不出来时作为虚拟 legacy 的兜底来源 */
   ttsUrl: string;
-  /** 自备运行时目录;空串 = 走托管下载 */
+  /** 自备运行时目录;空串 = 走托管下载。注册表里的同名项优先 */
   ttsRuntimeDir: string;
-  /** 运行时版本;空串 = 包里钉住的那个 */
+  /** 运行时版本;空串 = 包里钉住的那个。注册表里的同名项优先 */
   ttsRuntimeRelease: string;
   /** 演出包目录;null = 范例包 */
   packDir: string | null;
@@ -62,6 +62,10 @@ export interface EngineInit {
   vtsAuthToken: string | null;
   ttsProfile: Partial<TtsProfile> | null;
   overlay: Partial<OverlayConfig> | null;
+  /** TTS 服务注册表(已脱敏的纯数据);null = 装配层没接线,子进程按旧字段虚拟迁移 */
+  ttsRegistry: TtsRegistryRead | null;
+  /** 注册表引用到的密钥;键是 secretRef。只含当前配置真正用到的项 */
+  ttsSecrets: Record<string, string>;
   config: EngineConfigSnapshot;
 }
 
@@ -77,6 +81,11 @@ export type EngineRequest =
   | { kind: 'init'; init: EngineInit }
   | { kind: 'tool'; name: string; args: Record<string, unknown>; role: string; callId: string | null; round: number | null }
   | { kind: 'panel'; panel: EnginePanel; method: string; args: unknown[] }
+  /**
+   * 整份应用一份新的 TTS 注册表并回执。带 revision 是为了让主进程能区分
+   * "已保存"与"已应用":子进程没确认之前不把它显示成已经在用。
+   */
+  | { kind: 'tts-apply'; registry: TtsRegistryRead; secrets: Record<string, string> }
   | { kind: 'shutdown' };
 
 export type EnginePanel =
@@ -95,6 +104,12 @@ export interface EngineReady {
   streamUrl: string;
   danmakuUrl: string;
   overlayUrl: string;
+}
+
+/** tts-apply 的回执:子进程实际用上的版本与当前服务 */
+export interface TtsApplyReceipt {
+  appliedRevision: number;
+  activeServiceId: string;
 }
 
 /** 主 → 子:单向投递 */

@@ -13,6 +13,7 @@
  * 状态行与徽标走 300ms 级的推送缓存。
  */
 import { fork, type ChildProcess } from 'node:child_process';
+import { clampTtsProfile, type TtsProfile } from './tts/config.ts';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
@@ -37,6 +38,8 @@ import {
   VTUBER_DEFAULTS,
   VTUBER_PANEL_DECLS,
   VTUBER_TOOL_DECLS,
+  type TtsMountState,
+  type TtsPanelState,
   type VtuberAlignConsole,
   type VtuberClipsConsole,
   type VtuberDiagConsole,
@@ -46,6 +49,7 @@ import {
   type VtuberOverlayConsole,
   type VtuberPerformConsole,
   type VtuberTtsConsole,
+  type VtuberTtsRegistryConsole,
   type VtuberVtsConsole,
 } from './world.ts';
 import type {
@@ -61,6 +65,18 @@ import type {
   SlimEvent,
 } from './engine-ipc.ts';
 import { invalidActScriptShapeReceipt, normalizeExternalActScript } from './act-script.ts';
+import {
+  LEGACY_SERVICE_ID,
+  PROTECTED_SERVICE_IDS,
+  normalizeService,
+  publicRegistry,
+  validateRegistry,
+  type PublicTtsRegistry,
+  type TtsRegistryConfig,
+  type TtsRegistryRead,
+  type TtsServiceConfig,
+} from './tts/config.ts';
+import type { TtsApplyReceipt } from './engine-ipc.ts';
 
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
 const CHILD_ENTRY = fileURLToPath(new URL('./engine-child.ts', import.meta.url));
@@ -136,6 +152,9 @@ export class VtuberWorldProxy implements World {
   private lastStatusRenderAt = 0;
   private declCache: Pick<WorldConsoleDecl, 'lamps' | 'badges' | 'links'> = {};
   private lastConfigJson = '';
+  /** 子进程已确认应用的 TTS 配置版本;与持久化版本不同即"已保存未应用" */
+  private appliedTtsRevision = -1;
+  private appliedTtsServiceId = '';
   private lastForwardedCursor = -1;
   private configTimer: ReturnType<typeof setInterval> | null = null;
   private eventTimer: ReturnType<typeof setInterval> | null = null;
@@ -196,7 +215,12 @@ export class VtuberWorldProxy implements World {
     clips: ['state', 'reload', 'trigger', 'reset'],
     log: ['entries'],
     diag: ['state', 'report', 'record', 'presets', 'perform'],
-    tts: ['state', 'runtime', 'installRuntime', 'downloadModel', 'start', 'stop', 'setProfile', 'saveVoice', 'voiceWav', 'test'],
+    tts: [
+      'state', 'runtime', 'installRuntime', 'downloadModel', 'start', 'stop', 'setProfile',
+      'saveVoice', 'voiceWav', 'test', 'testService',
+      // 服务表的增删改与切换:只有主进程实现,但同样要过白名单
+      'services', 'saveService', 'deleteService', 'activateService',
+    ],
     align: ['state', 'units', 'align', 'synth'],
   };
 
@@ -211,6 +235,15 @@ export class VtuberWorldProxy implements World {
     if (panel === 'mount') return this.invokeMount(method, args);
     if (panel === 'model') return this.invokeModel(method, args);
     if (panel === 'diag') return this.invokeDiag(method, args);
+
+    // 服务注册表的增删改与切换是主进程的事:配置权威在这里,子进程只应用快照
+    if (panel === 'tts') {
+      if (method === 'services') return this.ttsServicesState();
+      if (method === 'saveService') return this.ttsSaveService(args[0]);
+      if (method === 'deleteService') return this.ttsDeleteService(args[0]);
+      if (method === 'activateService') return this.ttsActivateService(args[0]);
+      if (method === 'setProfile') return this.ttsSaveProfile(args[0] as Partial<TtsProfile>);
+    }
 
     if (panel === 'tts' && method === 'voiceWav') {
       const b64 = await this.panelCall<string | null>('tts', 'voiceWav', args);
@@ -236,6 +269,271 @@ export class VtuberWorldProxy implements World {
   }
 
   /**
+   * TTS 服务注册表的读写口径。配置权威在主进程:这里读装配层给的活配置,
+   * 写完再带 revision 推给子进程,由子进程回执确认"已应用"。密钥只以
+   * "是否已设置"的形式出现。
+   */
+  private readTtsRegistry(): TtsRegistryRead {
+    const read = this.opts.ttsRegistry?.();
+    if (read) return read;
+    return { ok: false, error: '装配层没有接线 TTS 配置读取口。' };
+  }
+
+  private ttsSecrets(): Record<string, string> {
+    return this.opts.ttsSecrets?.() ?? {};
+  }
+
+  private ttsServicesState(): PublicTtsRegistry & {
+    savedRevision: number;
+    appliedRevision: number;
+    appliedServiceId: string;
+    pendingApply: boolean;
+  } {
+    const read = this.readTtsRegistry();
+    if (!read.ok) {
+      return {
+        version: -1,
+        revision: -1,
+        activeServiceId: '',
+        services: [],
+        notes: [],
+        error: read.error,
+        protectedIds: [...PROTECTED_SERVICE_IDS],
+        savedRevision: -1,
+        appliedRevision: this.appliedTtsRevision,
+        appliedServiceId: this.appliedTtsServiceId,
+        pendingApply: false,
+      };
+    }
+    const secrets = this.ttsSecrets();
+    const registry = publicRegistry(read.registry, (ref) => (secrets[ref] ?? '').length > 0, read.notes);
+    return {
+      ...registry,
+      savedRevision: read.registry.revision,
+      appliedRevision: this.appliedTtsRevision,
+      appliedServiceId: this.appliedTtsServiceId,
+      pendingApply: read.registry.revision !== this.appliedTtsRevision,
+    };
+  }
+
+  /** 面板交回来的草稿一律过 `normalizeService`,不信任浏览器送来的形状。 */
+  private candidateFor(input: unknown, base: TtsServiceConfig | undefined): TtsServiceConfig | { error: string } {
+    if (typeof input !== 'object' || input === null) return { error: '服务配置必须是一个对象。' };
+    const raw = input as Record<string, unknown>;
+    const id = typeof raw.id === 'string' ? raw.id.trim() : (base?.id ?? '');
+    const merged = base ? { ...raw, id } : raw;
+    return normalizeService(merged, base);
+  }
+
+  private async persistAndApply(
+    registry: TtsRegistryConfig,
+    secretsPatch: { ref: string; value: string } | null,
+  ): Promise<{ savedRevision: number; appliedRevision: number; activeServiceId: string; pendingApply: boolean; message: string }> {
+    const errors = validateRegistry(registry);
+    if (errors.length > 0) throw new Error(`保存被拒绝:${errors.join(' ')}`);
+    const write = this.opts.onTtsRegistry;
+    if (!write) throw new Error('TTS 配置不可写:装配层没有提供持久化口。');
+    // 密钥先落:子进程拿到的新快照必须已经能解析出它引用的凭据
+    if (secretsPatch) this.opts.storeTtsSecret?.(secretsPatch.ref, secretsPatch.value);
+    try {
+      write(registry);
+    } catch (err) {
+      throw new Error(`保存失败,配置未改动:${err instanceof Error ? err.message : String(err)}`);
+    }
+    const applied = await this.applyTtsToEngine(registry);
+    return {
+      savedRevision: registry.revision,
+      appliedRevision: applied.appliedRevision,
+      activeServiceId: registry.activeServiceId,
+      pendingApply: applied.appliedRevision !== registry.revision,
+      message: applied.appliedRevision === registry.revision
+        ? `已保存并应用到演出引擎(版本 ${registry.revision})。`
+        : `已保存(版本 ${registry.revision}),但演出引擎尚未确认应用:${applied.error ?? '未知原因'}。可重试应用。`,
+    };
+  }
+
+  private async applyTtsToEngine(
+    registry: TtsRegistryConfig,
+  ): Promise<{ appliedRevision: number; activeServiceId: string; error?: string }> {
+    const read: TtsRegistryRead = { ok: true, registry, virtual: false, notes: [] };
+    try {
+      const receipt = await this.rpc(
+        { kind: 'tts-apply', registry: read, secrets: this.ttsSecrets() },
+        PANEL_RPC_TIMEOUT_MS,
+      ) as TtsApplyReceipt;
+      this.appliedTtsRevision = receipt.appliedRevision;
+      this.appliedTtsServiceId = receipt.activeServiceId;
+      return receipt;
+    } catch (err) {
+      return {
+        appliedRevision: this.appliedTtsRevision,
+        activeServiceId: this.appliedTtsServiceId,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /** 服务专属密钥名;只由服务 id 派生,不让表单索取宿主其他环境密钥。 */
+  private secretRefFor(id: string): string {
+    return `VTUBER_TTS_${id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
+  }
+
+  private originOf(url: string): string {
+    try {
+      const u = new URL(url.trim());
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return url.trim();
+    }
+  }
+
+
+  /** 旧声线按钮也写入注册表；保存后切换或重启不能回到旧档案。 */
+  private async ttsSaveProfile(patch: Partial<TtsProfile>): Promise<TtsProfile> {
+    // 没有注册表接线的旧嵌入方式保留原入口。
+    if (!this.opts.ttsRegistry || !this.opts.onTtsRegistry) {
+      return this.panelCall('tts', 'setProfile', [patch]);
+    }
+    const read = this.readTtsRegistry();
+    if (!read.ok) throw new Error(read.error);
+    const active = read.registry.services.find((s) => s.id === read.registry.activeServiceId);
+    if (!active?.legacy) throw new Error('当前服务没有 legacy 声线档案。');
+    const profile = clampTtsProfile(patch, active.legacy.profile);
+    const registry: TtsRegistryConfig = {
+      ...read.registry,
+      revision: read.registry.revision + 1,
+      services: read.registry.services.map((s) => s.id === active.id
+        ? { ...s, legacy: { ...active.legacy!, profile } }
+        : s),
+    };
+    const receipt = await this.persistAndApply(registry, null);
+    if (receipt.pendingApply) throw new Error(`档案已保存，但尚未应用：${receipt.message}`);
+    return profile;
+  }
+
+  private async ttsSaveService(input: unknown): Promise<unknown> {
+    if (typeof input !== 'object' || input === null) throw new Error('保存请求必须是一个对象。');
+    const req = input as {
+      service?: unknown;
+      baseRevision?: unknown;
+      apiKey?: unknown;
+      clearApiKey?: unknown;
+      activate?: unknown;
+    };
+    const read = this.readTtsRegistry();
+    if (!read.ok) throw new Error(`TTS 配置读不出来,先修好它:${read.error}`);
+    const baseRevision = typeof req.baseRevision === 'number' ? req.baseRevision : -1;
+    if (baseRevision !== -1 && baseRevision !== read.registry.revision) {
+      throw new Error(`配置已被别处改动(当前版本 ${read.registry.revision},你提交的是 ${baseRevision});刷新后重试。`);
+    }
+    const draft = req.service as Record<string, unknown> | undefined;
+    const draftId = typeof draft?.id === 'string' ? draft.id.trim() : '';
+    const base = read.registry.services.find((s) => s.id === draftId);
+    /*
+     * 刚把鉴权切到 Bearer 的表单还没有密钥名:由 id 派生一个,别把它当成非法输入
+     * 挡回去——密钥名不是操作者该编的东西。
+     */
+    if (draft && typeof draft.auth === 'object' && draft.auth !== null) {
+      const draftAuth = draft.auth as Record<string, unknown>;
+      if (draftAuth.type === 'bearer' && !String(draftAuth.secretRef ?? '').trim()) {
+        draft.auth = { type: 'bearer', secretRef: this.secretRefFor(draftId || base?.id || '') };
+      }
+    }
+    const candidate = this.candidateFor(req.service, base);
+    if ('error' in candidate) throw new Error(candidate.error);
+
+    /*
+     * 跨源改地址不把旧凭据带到新站点:bearer 服务换 origin 且本次没给新 Key 时,
+     * 换一个全新的密钥名。旧 Key 留在原名字下,新地址报"未设置",等操作者填。
+     */
+    let secretsPatch: { ref: string; value: string } | null = null;
+    const suppliedKey = typeof req.apiKey === 'string' ? req.apiKey : '';
+    if (candidate.auth.type === 'bearer') {
+      const originChanged = base !== undefined
+        && this.originOf(base.baseUrl) !== this.originOf(candidate.baseUrl);
+      if (originChanged && !suppliedKey) {
+        candidate.auth = { type: 'bearer', secretRef: this.secretRefFor(`${candidate.id}_${Math.abs(hashOrigin(this.originOf(candidate.baseUrl)))}`) };
+      } else if (suppliedKey) {
+        secretsPatch = { ref: candidate.auth.secretRef, value: suppliedKey };
+      }
+      // 新条目自带密钥名,不沿用别人的
+      if (!base && !suppliedKey) candidate.auth = { type: 'bearer', secretRef: this.secretRefFor(candidate.id) };
+      if (req.clearApiKey === true && candidate.auth.type === 'bearer') {
+        secretsPatch = { ref: candidate.auth.secretRef, value: '' };
+      }
+    }
+
+    const exists = read.registry.services.some((s) => s.id === candidate.id);
+    const services = exists
+      ? read.registry.services.map((s) => (s.id === candidate.id ? candidate : s))
+      : [...read.registry.services, candidate];
+    const activate = req.activate === true;
+    const registry: TtsRegistryConfig = {
+      version: read.registry.version,
+      revision: read.registry.revision + 1,
+      activeServiceId: activate ? candidate.id : read.registry.activeServiceId,
+      services,
+    };
+    return this.persistAndApply(registry, secretsPatch);
+  }
+
+  private async ttsDeleteService(input: unknown): Promise<unknown> {
+    if (typeof input !== 'object' || input === null) throw new Error('删除请求必须是一个对象。');
+    const req = input as { id?: unknown; baseRevision?: unknown; replacementId?: unknown };
+    const id = typeof req.id === 'string' ? req.id : '';
+    if (!id) throw new Error('缺少要删除的服务 id。');
+    if (PROTECTED_SERVICE_IDS.includes(id)) throw new Error(`内置服务「${id}」不能删除;它是旧配置的兼容投影。`);
+    const read = this.readTtsRegistry();
+    if (!read.ok) throw new Error(`TTS 配置读不出来,先修好它:${read.error}`);
+    const baseRevision = typeof req.baseRevision === 'number' ? req.baseRevision : -1;
+    if (baseRevision !== -1 && baseRevision !== read.registry.revision) {
+      throw new Error(`配置已被别处改动(当前版本 ${read.registry.revision});刷新后重试。`);
+    }
+    if (!read.registry.services.some((s) => s.id === id)) throw new Error(`没有这个服务:${id}`);
+    const services = read.registry.services.filter((s) => s.id !== id);
+    if (services.length === 0) throw new Error('至少要留一条 TTS 服务。');
+    let activeServiceId = read.registry.activeServiceId;
+    if (activeServiceId === id) {
+      const replacement = typeof req.replacementId === 'string' ? req.replacementId : '';
+      if (!replacement) throw new Error('删的是当前服务:请指定替代服务,或先切到别的服务再删。');
+      if (!services.some((s) => s.id === replacement)) throw new Error(`替代服务不存在:${replacement}`);
+      activeServiceId = replacement;
+    }
+    // 数组整体替换:对象深合并不会因为键缺席而删除元素
+    const registry: TtsRegistryConfig = {
+      version: read.registry.version,
+      revision: read.registry.revision + 1,
+      activeServiceId,
+      services,
+    };
+    return this.persistAndApply(registry, null);
+  }
+
+  private async ttsActivateService(input: unknown): Promise<unknown> {
+    if (typeof input !== 'object' || input === null) throw new Error('切换请求必须是一个对象。');
+    const req = input as { id?: unknown; baseRevision?: unknown };
+    const id = typeof req.id === 'string' ? req.id : '';
+    const read = this.readTtsRegistry();
+    if (!read.ok) throw new Error(`TTS 配置读不出来,先修好它:${read.error}`);
+    if (!read.registry.services.some((s) => s.id === id)) throw new Error(`没有这个服务:${id}`);
+    const baseRevision = typeof req.baseRevision === 'number' ? req.baseRevision : -1;
+    if (baseRevision !== -1 && baseRevision !== read.registry.revision) {
+      throw new Error(`配置已被别处改动(当前版本 ${read.registry.revision});刷新后重试。`);
+    }
+    const registry: TtsRegistryConfig = {
+      version: read.registry.version,
+      revision: read.registry.revision + 1,
+      activeServiceId: id,
+      services: read.registry.services,
+    };
+    const result = await this.persistAndApply(registry, null);
+    return {
+      ...result,
+      message: `${result.message}已预取或正在合成的音频仍按原服务放完,新发起的合成才用新声音。`,
+    };
+  }
+
+  /**
    * 挂载面板统一读取 VTS、TTS 与演出流状态，演出流取 overlay 的 streamUp。某一路不可读时仅将该项置 null，由面板显示不可用，不影响其他链路。
    */
   private async invokeMount(method: string, args: unknown[]): Promise<unknown> {
@@ -243,7 +541,7 @@ export class VtuberWorldProxy implements World {
       case 'state': {
         const [vts, tts, overlay] = await Promise.all([
           this.panelCall('vts', 'state').catch(() => null),
-          this.panelCall('tts', 'state').catch(() => null),
+          this.mountTtsState().catch(() => null),
           this.panelCall<{ url: string | null; streamUp: boolean }>('overlay', 'state').catch(() => null),
         ]);
         return {
@@ -261,12 +559,39 @@ export class VtuberWorldProxy implements World {
       case 'vtsTest':
         return { ok: true, message: await this.panelCall<string>('vts', 'test', args) };
       case 'ttsState':
-        return this.panelCall('tts', 'state');
+        return this.mountTtsState();
       case 'ttsStart':
         return this.panelCall('tts', 'start');
       default:
         return this.panelCall('tts', 'stop');
     }
+  }
+
+  /**
+   * 挂载行要的声音状态:当前服务是谁、保存与应用的版本差,以及(仅 managed 时)
+   * 本地进程的启停状态。external 服务没有本地资源,那不是错误。
+   */
+  private async mountTtsState(): Promise<TtsMountState> {
+    const [panel, services] = await Promise.all([
+      this.panelCall<TtsPanelState>('tts', 'state'),
+      Promise.resolve(this.ttsServicesState()),
+    ]);
+    const local = panel.local;
+    return {
+      serviceId: services.activeServiceId,
+      serviceName: services.services.find((s) => s.id === services.activeServiceId)?.name ?? '(未知服务)',
+      protocol: services.services.find((s) => s.id === services.activeServiceId)?.protocol ?? '',
+      savedRevision: services.savedRevision,
+      appliedRevision: services.appliedRevision,
+      pendingApply: services.pendingApply,
+      managed: panel.managed,
+      local: local ? { phase: local.phase, pid: local.pid, detail: local.detail, url: local.url, reachable: local.reachable } : null,
+      phase: local?.phase ?? 'external',
+      pid: local?.pid ?? null,
+      detail: local?.detail ?? null,
+      url: local?.url ?? panel.registry.services.find((s) => s.id === panel.registry.activeServiceId)?.baseUrl ?? '',
+      reachable: local?.reachable ?? panel.appliedRevision >= 0,
+    };
   }
 
   /**
@@ -466,18 +791,25 @@ export class VtuberWorldProxy implements World {
     };
   }
 
-  ttsConsole(): Asyncified<VtuberTtsConsole> {
+  ttsConsole(): Asyncified<VtuberTtsConsole> & Asyncified<VtuberTtsRegistryConsole> {
     return {
+      // 注册表读写是主进程本地调用,不过 IPC
+      services: async () => this.ttsServicesState(),
+      saveService: async (input) => this.ttsSaveService(input),
+      deleteService: async (input) => this.ttsDeleteService(input),
+      activateService: async (input) => this.ttsActivateService(input),
       state: () => this.panelCall('tts', 'state'),
       runtime: () => this.panelCall('tts', 'runtime'),
       installRuntime: () => this.panelCall('tts', 'installRuntime'),
       downloadModel: (id) => this.panelCall('tts', 'downloadModel', [id]),
       start: () => this.panelCall('tts', 'start'),
       stop: () => this.panelCall('tts', 'stop'),
-      setProfile: (patch) => this.panelCall('tts', 'setProfile', [patch]),
+      setProfile: (patch) => this.ttsSaveProfile(patch),
       saveVoice: (name, audioBase64) => this.panelCall('tts', 'saveVoice', [name, audioBase64]),
       voiceWav: (file) => this.panelCall('tts', 'voiceWav', [file]),
       test: (text, profile) => this.panelCall('tts', 'test', [text, profile]),
+      // 草稿试听走子进程(它才有 HTTP 客户端与声线库),但结果只回浏览器
+      testService: (draft, text, apiKey) => this.panelCall('tts', 'testService', [draft, text, apiKey]),
     };
   }
 
@@ -551,6 +883,10 @@ export class VtuberWorldProxy implements World {
     const ready = (await this.rpc({ kind: 'init', init: this.buildInit() }, 30_000)) as EngineReady;
     this.urls = ready;
     this.ready = true;
+    // init 里带的就是最新持久化配置,所以此刻"已应用"= 读到的那个版本
+    const tts = this.readTtsRegistry();
+    this.appliedTtsRevision = tts.ok ? tts.registry.revision : -1;
+    this.appliedTtsServiceId = tts.ok ? tts.registry.activeServiceId : '';
     this.host?.log.info(`演出引擎子进程已就绪 pid=${child.pid}`, { overlay: ready.overlayUrl });
   }
 
@@ -761,6 +1097,9 @@ export class VtuberWorldProxy implements World {
       vtsAuthToken: o.vtsAuthToken ?? null,
       ttsProfile: o.ttsProfile ?? null,
       overlay: o.overlay ?? null,
+      // 子进程重启后拿到的注册表是此刻的最新值,不是 Proxy 构造时那一份
+      ttsRegistry: o.ttsRegistry?.() ?? null,
+      ttsSecrets: o.ttsSecrets?.() ?? {},
       config: this.sampleConfig(),
     };
   }
@@ -795,11 +1134,6 @@ export class VtuberWorldProxy implements World {
       };
     }
     if (o.modelProfile) s.modelProfile = o.modelProfile() ?? d.modelProfile;
-    if (o.ttsBaseLmFile) s.ttsBaseLmFile = o.ttsBaseLmFile() ?? d.ttsBaseLmFile;
-    if (o.ttsAcousticFile) s.ttsAcousticFile = o.ttsAcousticFile() ?? d.ttsAcousticFile;
-    if (o.ttsAlignerLmFile) s.ttsAlignerLmFile = o.ttsAlignerLmFile() ?? d.ttsAlignerLmFile;
-    if (o.ttsAlignerAudioFile) s.ttsAlignerAudioFile = o.ttsAlignerAudioFile() ?? d.ttsAlignerAudioFile;
-    if (o.ttsVoicesDir) s.ttsVoicesDir = o.ttsVoicesDir() ?? d.ttsVoicesDir;
     if (o.live2dDir) s.live2dDir = o.live2dDir() ?? d.live2dDir;
     return s;
   }
@@ -830,8 +1164,14 @@ export class VtuberWorldProxy implements World {
   }
 }
 
-function waitExit(child: ChildProcess, timeoutMs: number): Promise<void> {
-  if (child.exitCode !== null) return Promise.resolve();
+/** 跨源换地址时给新密钥名一个稳定的短后缀;in-memory 与落盘结果一致即可。 */
+function hashOrigin(origin: string): number {
+  let hash = 0;
+  for (let i = 0; i < origin.length; i++) hash = (Math.imul(hash, 31) + origin.charCodeAt(i)) | 0;
+  return hash;
+}
+
+function waitExit(child: ChildProcess, timeoutMs: number): Promise<void> {  if (child.exitCode !== null) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, timeoutMs);
     timer.unref?.();

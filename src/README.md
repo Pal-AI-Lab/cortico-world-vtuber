@@ -105,7 +105,6 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
     "enabled": true,
     "vtsWsUrl": "ws://127.0.0.1:8001",
     "streamPort": 7792,
-    "ttsUrl": "http://127.0.0.1:8010",
     "audioDevice": "CABLE Input",
     "audioMirrorSystem": true,
     "audioSecondary": "default",
@@ -126,7 +125,8 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
 }
 ```
 
-(另有 `ttsProfile` 与 `overlay` 两段由控制台面板写回,不必手填。)
+(另有 `tts` 服务表、`ttsProfile`(内置 legacy 条目的兼容投影)与 `overlay` 由控制台面板写回,
+不必手填。没有 `tts` 段时按旧的 `ttsUrl` 等字段在内存做兼容映射,见下文「TTS」。)
 
 演出包目录是配置项 `worlds.vtuber.packDir`(控制台「模型档案」面板可选目录,重启生效)。留空时
 先找部署目录下的 `vtuber-pack/`、再找 bot 包目录下的 `vtuber-pack/`,都没有就用 `examples/vtuber-pack/`。
@@ -144,7 +144,8 @@ config.json),改动经 `overlay.config` 事件热推给所有订阅中的页面�
   演出反应不早于观众看到的画面(向事件库反查,只看信封的 source/ts)。0 或空=不设地板。
 - `streamEnabled` / `alignEnabled` 是流式输出与逐字对齐的开关(都默认开、都热改),
   行为组合见「流式输出与 <> 锚点」一节;server 侧能力缺席时自动降级,不用手动关。
-- `worlds.vtuber.ttsProfile` 是声线档案(参考音频/转写/生成参数),控制台面板改动后自动写回。
+- `worlds.vtuber.tts` 是 TTS 服务表(见「TTS」一节)。`worlds.vtuber.ttsProfile` 是它的内置
+  legacy 条目的兼容投影,控制台写的是服务表;没有 `tts` 段时按这一份做内存映射。
 - `decay*Sec` 是三个 State 通道无新指令后滑回中性的随机区间(秒),控制台可热改。
 - `live2dDir` 是 VTube Studio 加载模型的目录(`StreamingAssets/Live2DModels`),热改。
   模型档案按 `<live2dDir>/<模型目录>/cortico.profile.json` 在这里发现;模型文件仍由
@@ -577,19 +578,43 @@ expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文�
 面部参数(嘴形、眉位),弹出/收回时会被模型侧拽一下,这是模型作者的成对设计,
 代码侧不补偿,观感不合适去 exp3 文件里删。
 
-## TTS(VoxCPM2)
+## TTS
+
+TTS 是一张服务表:`worlds.vtuber.tts` 里按顺序放着若干条服务配置,`activeServiceId` 指当前
+在用的一条。协议(`openai-speech` / `voxcpm-legacy`)与管理方式(`external` /
+`managed-voxcpm`)是两个正交概念,配置模型、校验、旧配置解析与脱敏都在
+[`tts/config.ts`](tts/config.ts);当前服务解析、执行快照与适配器缓存都在
+[`tts/registry.ts`](tts/registry.ts);两种协议各一个适配器
+([`tts/openai-speech.ts`](tts/openai-speech.ts)、[`tts/voxcpm-legacy.ts`](tts/voxcpm-legacy.ts)),
+共用的收流循环在 [`tts/stream.ts`](tts/stream.ts),音频解码与包络在
+[`tts/audio.ts`](tts/audio.ts)。操作层面的说明(注册、Base URL 语义、试听、密钥、故障排查)
+在包根 [README](../README.md) 的「TTS 服务」一节,这里只记代码侧的分层。
+
+配置里没有 `tts` 时,读取时在内存生成一条内置 legacy 条目,把旧的 `ttsUrl`、`ttsProfile`
+与运行时/权重/声线库路径映射进去;读操作不写盘,第一次显式保存才落盘,并在那之前给部署
+配置留一份 `.bak-tts-migration-<时间戳>`。落盘时旧扁平字段同步成内置条目的兼容投影。
+
+每次开始合成一片音频时取一次冻结的执行快照(服务、鉴权、模型、声音、参数、解码与质量
+策略),整片含允许的回退都用同一份;切换只影响之后新发起的合成,在途与已预取的片按原服务
+放完。语速样本按服务/配置分命名空间,legacy 沿用旧公式以识别已有日志。
+
+下面几节里 VoxCPM2 专有的行为(参考音频克隆、私有 `/stream`、对齐器、长静默重合成、
+32 秒硬上限)都只对 `voxcpm-legacy` 条目生效,通用 OpenAI 服务不继承这些假设。
+
+### VoxCPM2(legacy)
 
 随包 server 运行时在 [`voxcpm2-server/`](voxcpm2-server/)；GGUF 与声线库通过
-`worlds.vtuber.tts*` 路径接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
+内置 legacy 条目的 `legacy.runtime` 接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
 
-进程启停在「挂载」面板的「声音」那一行:spawn `llama-tts-server.exe`
-([`tts-server.ts`](tts-server.ts),端口取自 `ttsUrl`);World 停止时连带停掉它拉起的进程。
+进程启停在「挂载」面板的「声音」那一行,只对 `managed-voxcpm` 条目可用:spawn
+`llama-tts-server.exe` ([`tts-server.ts`](tts-server.ts),端口取内置条目的服务根);
+World 停止时连带停掉它拉起的进程。external 条目即使跑在本机也不归 World 启停。
 其余操作在「声线档案」和「时间点标注」面板：
 
 - **声线档案**:参考音频可「从本地导入」,缓存进配置的声线库目录(面板显示实际路径),
   也可直接选库里已有的;「试听参考」原声回放确认选对了人。带转写按续写克隆合成,
   只给音频是纯克隆。生成参数 `seed / cfg_value / inference_timesteps / max_steps / temperature`
-  同面板可调。**「保存档案」是唯一的生效动作**:写回 config.json 的 `worlds.vtuber.ttsProfile`,
+  同面板可调。**「保存档案」是唯一的生效动作**:写回内置条目的 `legacy.profile`,
   同时把转写落成同名 `.txt` 侧车(下次选中这条声线自动带回来,清空转写就删掉侧车)。
   改了还没保存时面板会标出来——演出仍走已保存的那份。
 - **参考音频转码**:VoxCPM2 的 `reference_audio` 只吃 wav,声线库因此只存 wav。

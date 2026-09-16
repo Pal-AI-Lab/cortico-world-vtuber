@@ -126,6 +126,12 @@
 /* ---- 一排东西太多时允许换行(动作调参那几排 cue 按钮、字幕样式那两排) ---- */
 .vt-wrap { flex-wrap: wrap; }
 
+/* ---- 「添加 TTS 服务」:虚线边,与卡片里那些实心按钮分开 ---- */
+.vt-add { border-style: dashed; }
+
+/* ---- TTS 服务条目摘要右侧那排:内置标记、状态、设为当前 / 删除 ---- */
+.vt-svcnote { display: inline-flex; align-items: center; gap: 8px; }
+
 @container console-content (max-width: 560px) {
   .vt-mountrow {
     display: grid;
