@@ -1,6 +1,6 @@
 # Live2D 模型适配指南
 
-把一个 VTube Studio(VTS)里能加载的 Live2D 模型接到 io-vtuber 的演出层。产物只有一份
+把一个 VTube Studio(VTS)里能加载的 Live2D 模型接到 cortico-world-vtuber 的演出层。产物只有一份
 `cortico.profile.json`,放在模型自己的目录里;代码库不改一个字。整个过程可以由编码 AI
 按本文逐步完成,每一步的输入都是模型目录里的文件,输出都是 JSON 字段。
 

@@ -1,4 +1,4 @@
-# io-vtuber
+# cortico-world-vtuber
 
 直播演出 World:消费弹幕与对局事件,输出混编 TTS 语音与 Live2D 动作的连续演出。
 设计文档见 [vtuber_performance_module_design.md](vtuber_performance_module_design.md)。

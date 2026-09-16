@@ -16,10 +16,10 @@ World 内部的分层、演出包格式、台本记号与 Live2D 适配写在 [`
 这是一个**扩展包**,不是 Cortico 的一部分。它按 Cortico 的扩展契约声明自己:
 
 ```jsonc
-"cortico": { "kind": "world", "api": 1, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
+"cortico": { "kind": "world", "api": 4, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
 ```
 
-运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/worlds.ts`、
+运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/world.ts`、
 `cortico/core/types.ts` …)。这些 specifier 由框架 `src/extensions/runtime.ts` 注册的模块
 钩子解析到框架源码本身,**同一份实例**——扩展与框架共用一个 `WorldAssembly`、一套
 日志锚点。因此包必须是 `"type": "module"`:CommonJS 包经 require 会拿到框架源码的
