@@ -69,16 +69,8 @@ corepack pnpm build       # esbuild → dist/console.{js,css}
 
 ## TTS 服务
 
-默认服务是内置的 VoxCPM2:旧部署的 `ttsUrl` / `ttsProfile` 原样映射进来,没有 `tts` 段的配置
-行为不变。要接自己的服务,到控制台「声线档案」页「添加」:协议选 `openai-speech`,填名称、
-Base URL、模型与声音(Base URL 是 API 前缀,客户端在后面追加 `audio/speech`);需要 Bearer 时
-把鉴权切过去,密钥进宿主密钥存储,配置 JSON 里只留密钥名。切换服务只影响之后新发起的合成,
-多服务配置写在 `worlds.vtuber.tts` 下。
-
-## TTS 运行时与权重
-
-运行时与权重属于 **managed-voxcpm** 那条服务:World 不带二进制也不带权重,控制台
-「声线档案」页把它们取来。
+TTS服务部分默认支持OpenAI Speech标准的TTS服务端口，您可以接入任何您希望的TTS服务！
+当然，我们也提供了支持的Voxcpm2默认服务，您可以通过以下的方式安装：
 
 - **运行时**装到 `<运行时根>/llama.cpp-omni/<release>/<平台后端>/`。二进制来自
   [Phantivia/llama.cpp-omni](https://github.com/Phantivia/llama.cpp-omni) 的 `tts-*` release
@@ -122,6 +114,7 @@ tsx scripts/check-tts-runtime.ts
 
 它会装运行时、下 VoxCPM2 权重、起 server,然后打 `/health`、流式合成、对齐各一次。
 联网,要显卡,默认装在 `scratch/tts-runtime-check/` 下,不碰真部署。
+
 
 ## 第三方资产
 
