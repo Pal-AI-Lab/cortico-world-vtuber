@@ -49,7 +49,8 @@ corepack pnpm build
 
 `tsconfig.json` 的 `paths` 与 `vitest.config.ts` 的 `resolve.alias` 都把 `cortico/*` 指向
 `../BOT/src/`——也就是**与本目录同级的框架 checkout**。框架放在别处时改这两处(它们必须
-同步)。生产里不靠这两条:那时解析由框架的模块钩子完成。
+同步),或在本目录同级放一个名为 `BOT` 的链接指向那份 checkout。生产里不靠这两条:那时解析
+由框架的模块钩子完成。
 
 ```bash
 corepack pnpm typecheck   # tsc --noEmit,Node 侧与浏览器侧一份配置一起 check
@@ -57,13 +58,27 @@ corepack pnpm test        # vitest run
 corepack pnpm build       # esbuild → dist/console.{js,css}
 ```
 
+改完面板要让浏览器**硬刷新**(Ctrl+Shift+R)。扩展产物的 URL 里只有包版本
+(`/assets/extensions/<包名>/<版本>/console.js`),宿主对它发的是 `immutable` 的一年缓存;
+版本没变时浏览器不会去问服务端,重启 Cortico 也换不掉页面里那一份。开发期开着 DevTools
+的 "Disable cache" 也可以。
+
 测试全程 mock:不连 VTube Studio、不起真 TTS server、不开声卡。构建脚本**不给
 `cortico/*` 配 alias 也不 external**——报 "Could not resolve cortico/…" 就说明浏览器侧
 漏了一处运行时依赖,去把它本地化,不要在构建里放行。
 
+## TTS 服务
+
+默认服务是内置的 VoxCPM2:旧部署的 `ttsUrl` / `ttsProfile` 原样映射进来,没有 `tts` 段的配置
+行为不变。要接自己的服务,到控制台「声线档案」页「添加」:协议选 `openai-speech`,填名称、
+Base URL、模型与声音(Base URL 是 API 前缀,客户端在后面追加 `audio/speech`);需要 Bearer 时
+把鉴权切过去,密钥进宿主密钥存储,配置 JSON 里只留密钥名。切换服务只影响之后新发起的合成,
+多服务配置写在 `worlds.vtuber.tts` 下。
+
 ## TTS 运行时与权重
 
-World 不带二进制也不带权重,控制台的 TTS 面板负责把它们取来:
+运行时与权重属于 **managed-voxcpm** 那条服务:World 不带二进制也不带权重,控制台
+「声线档案」页把它们取来。
 
 - **运行时**装到 `<运行时根>/llama.cpp-omni/<release>/<平台后端>/`。二进制来自
   [Phantivia/llama.cpp-omni](https://github.com/Phantivia/llama.cpp-omni) 的 `tts-*` release

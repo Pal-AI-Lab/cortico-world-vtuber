@@ -318,6 +318,8 @@ function makeStreamPerformer(opts: {
       },
       synthStream,
       alignPcm: opts.alignPcm,
+      // 硬时长上限由 World 按当前服务能力传来,编排器不再自带这个常量
+      maxAudioMs: () => 32_000,
     },
     streamEnabled: () => true,
     alignEnabled: () => opts.align,
