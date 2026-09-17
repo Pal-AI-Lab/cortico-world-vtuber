@@ -24,12 +24,13 @@ Windows 的 CUDA 版另取 [ggml-org/llama.cpp](https://github.com/ggml-org/llam
 
 ## 模型权重
 
-都不在版本库里,由面板按固定来源下载到 `<模型根>/vtuber/`。
+都不在版本库里,放在 `<模型根>/vtuber/`。VoxCPM2 的两个由面板按固定来源下载;
+对齐器的两个**本项目不转发**,由操作者自己从 Qwen 的原始权重转换。
 
 | 文件 | 来源 | 许可 |
 |---|---|---|
 | `VoxCPM2-BaseLM-F16.gguf`<br>`VoxCPM2-Acoustic-F16.gguf` | [DennisHuang648/VoxCPM2-GGUF](https://huggingface.co/DennisHuang648/VoxCPM2-GGUF) @ `169f64d`,由 [openbmb/VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) 转换 | 见上游模型卡 |
-| `Qwen3-Aligner-LM-F16.gguf`<br>`Qwen3-Aligner-Audio-F16.gguf` | [Qwen/Qwen3-ForcedAligner-0.6B-hf](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf),由项目用 `scripts/aligner-gguf.ts` 转换后随运行时 release 发布 | Apache-2.0 |
+| `Qwen3-Aligner-LM-F16.gguf`<br>`Qwen3-Aligner-Audio-F16.gguf` | [Qwen/Qwen3-ForcedAligner-0.6B-hf](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B-hf),操作者自己用 `scripts/aligner-gguf.ts` 转换,不随 release 分发 | Apache-2.0 |
 
 ## 其他运行时依赖
 

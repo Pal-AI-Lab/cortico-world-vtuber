@@ -62,6 +62,9 @@ async function main(): Promise<void> {
       console.log(`  已有 ${spec.file}`);
       continue;
     }
+    if (!spec.url) {
+      throw new Error(`${spec.file} 要自己转出来放进 ${models},见 README「对齐器权重」`);
+    }
     console.log(`  下载 ${spec.file}(约 ${(spec.approxBytes / 1e9).toFixed(2)} GB)`);
     await modelStore.download(spec.id);
   }

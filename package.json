@@ -27,6 +27,7 @@
     "src",
     "!src/voxcpm2-server",
     "dist",
+    "scripts",
     "README.md",
     "THIRD_PARTY_NOTICES.md"
   ],

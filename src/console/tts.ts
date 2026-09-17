@@ -372,7 +372,7 @@ export const ttsPanel: ConsolePanel = {
   },
 };
 
-/** 面板顶部那块:运行时装没装、四个权重在不在,各带一个下载按钮 */
+/** 面板顶部那块:运行时装没装、四个权重在不在;能下的带下载按钮,自备的只报状态 */
 interface RuntimePanelState {
   release: string;
   key: string | null;
@@ -390,13 +390,15 @@ interface RuntimePanelState {
     total: number | null;
     detail: string | null;
     required: boolean;
+    downloadable: boolean;
     source: string;
   }[];
 }
 
 const RUNTIME_DESC =
   '运行时是 llama-tts-server 的二进制,权重是它加载的 GGUF。两样都不随包发布,'
-  + '这里下到部署根的 runtimes/ 与 models/vtuber/ 下。配置页填了「TTS 运行时目录」就不下载。';
+  + '这里下到部署根的 runtimes/ 与 models/vtuber/ 下。配置页填了「TTS 运行时目录」就不下载。'
+  + '对齐器那两个不转发,自己按包 README 转出来放进 models/vtuber/。';
 
 function gb(bytes: number): string {
   return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${Math.round(bytes / 1e6)} MB`;
@@ -468,19 +470,21 @@ function mountRuntimeSection(ctx: ConsolePanelContext): void {
           ? progressText(m.done, m.total)
           : m.phase === 'error'
             ? (m.detail ?? '下载失败')
-            : '未下载';
-      const btn = ui.button('下载', {
-        size: 'sm',
-        onClick: () => void download(m.id, m.file),
-      });
-      btn.disabled = busy || m.phase === 'present';
+            : m.downloadable ? '未下载' : '要自己放进来';
       row.append(
         ui.pill(m.required ? '必需' : '选配', 'plain'),
         ui.chip(m.file),
         ui.h('span', '', state),
         ui.h('span', 'grow'),
-        btn,
       );
+      if (m.downloadable) {
+        const btn = ui.button('下载', {
+          size: 'sm',
+          onClick: () => void download(m.id, m.file),
+        });
+        btn.disabled = busy || m.phase === 'present';
+        row.append(btn);
+      }
       rows.appendChild(row);
       rows.appendChild(dimLine(ctx, m.source));
     }

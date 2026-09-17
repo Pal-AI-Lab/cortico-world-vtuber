@@ -70,20 +70,43 @@ World 不带二进制也不带权重,控制台的 TTS 面板负责把它们取�
   (上游 `tc-mb/llama.cpp-omni` 不发这几个可执行文件),Windows CUDA 版另取 ggml-org 的
   cudart 包。自己编的构建填进「TTS 运行时目录」就不再下载。
 - **权重**下到 `<模型根>/vtuber/`:VoxCPM2 的两个 GGUF 走 HuggingFace 钉住的 revision,
-  对齐器的两个随运行时 release 发布。来源与许可见
+  面板上点一下就下。对齐器的两个要自己转,见下。来源与许可见
   [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 - **参考音频**属于部署私有资产,放「声线库目录」,留空时落在权重目录旁边。
 
-真机跑一遍全流程:
+### 对齐器权重
+
+对齐器给字幕逐字时间点。全网没有现成的 GGUF,本包也不转发 Qwen 的权重,自己转一次:
+
+```bash
+# 原始权重,任意目录
+huggingface-cli download Qwen/Qwen3-ForcedAligner-0.6B-hf --local-dir ./aligner-hf
+
+# 转成两个 GGUF,直接落进权重目录
+tsx scripts/aligner-gguf.ts --src ./aligner-hf --out <模型根>/vtuber
+```
+
+出 `Qwen3-Aligner-LM-F16.gguf`(1.20 GB)与 `Qwen3-Aligner-Audio-F16.gguf`(0.66 GB)。
+两个文件在 `<模型根>/vtuber/` 里就自动认;放别处就在 `config.json` 的 `worlds.vtuber`
+节里指过去:
+
+```jsonc
+"ttsAlignerLmFile":    "D:/weights/Qwen3-Aligner-LM-F16.gguf",
+"ttsAlignerAudioFile": "D:/weights/Qwen3-Aligner-Audio-F16.gguf"
+```
+
+**这两项一旦填了就是必须加载**:文件不在,TTS server 不启动,并报出缺的那个路径。
+两项都留空、默认位置也没有文件时,TTS 照常出声,只是没有逐字时间点,字幕与锚点回落按
+字符比例估计。
+
+真机跑一遍全流程(对齐器权重要先转好,不然它直接报缺):
 
 ```bash
 tsx scripts/check-tts-runtime.ts
 ```
 
-它会装运行时、下权重、起 server,然后打 `/health`、流式合成、对齐各一次。联网,要显卡,
-默认装在 `scratch/tts-runtime-check/` 下,不碰真部署。
-
-对齐器缺席时 TTS 照常,只是没有逐字时间点,字幕与锚点回落按字符比例估计。
+它会装运行时、下 VoxCPM2 权重、起 server,然后打 `/health`、流式合成、对齐各一次。
+联网,要显卡,默认装在 `scratch/tts-runtime-check/` 下,不碰真部署。
 
 ## 第三方资产
 
