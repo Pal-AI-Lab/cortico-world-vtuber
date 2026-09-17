@@ -1,7 +1,7 @@
 /**
  * Qwen3-ForcedAligner-0.6B(HF safetensors)→ GGUF。
  *
- *   tsx scripts/aligner-gguf.ts [--src <目录>] [--out <目录>]
+ *   tsx scripts/aligner-gguf.ts --src <HF 权重目录> --out <输出目录>
  *
  * 产出两个文件:
  * - Qwen3-Aligner-LM-F16.gguf     llama.cpp `qwen3` 架构的 0.6B 主干 + 词表
@@ -18,7 +18,7 @@
  */
 import { closeSync, createWriteStream, mkdirSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { argv } from 'node:process';
+import { argv, exit } from 'node:process';
 
 // ─── GGUF 写入 ────────────────────────────────────────────────────────────
 
@@ -506,16 +506,24 @@ function audioKv(cfg: AlignerConfig): Map<string, KvValue> {
   return kv;
 }
 
-function arg(flag: string, fallback: string): string {
+function arg(flag: string): string | null {
   const i = argv.indexOf(flag);
-  return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
+  return i >= 0 && argv[i + 1] ? argv[i + 1] : null;
 }
 
 async function main(): Promise<void> {
-  const here = resolve(import.meta.dirname, '..');
-  const models = join(here, '..', 'Cortico-Resources', 'models', 'vtuber-tts');
-  const src = resolve(arg('--src', join(models, 'aligner')));
-  const out = resolve(arg('--out', models));
+  // 两个都必填:猜出来的输出目录会让 1.9 GB 权重落在意想不到的地方
+  const srcArg = arg('--src');
+  const outArg = arg('--out');
+  if (!srcArg || !outArg) {
+    console.error('用法: tsx scripts/aligner-gguf.ts --src <HF 权重目录> --out <输出目录>');
+    console.error('  --src  Qwen/Qwen3-ForcedAligner-0.6B-hf 下下来的目录');
+    console.error('         (要有 config.json、model.safetensors、tokenizer.json)');
+    console.error('  --out  两个 GGUF 落在哪,一般是 <模型根>/vtuber');
+    exit(1);
+  }
+  const src = resolve(srcArg);
+  const out = resolve(outArg);
   mkdirSync(out, { recursive: true });
 
   const cfg = JSON.parse(readFileSync(join(src, 'config.json'), 'utf8')) as AlignerConfig;
