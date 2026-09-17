@@ -7,7 +7,7 @@
  */
 
 /** 钉住的运行时版本;配置里的 ttsRuntime.release 可以覆盖。 */
-export const PINNED_RELEASE = 'tts-b64d092c-1';
+export const PINNED_RELEASE = 'tts-b64d092c-2';
 
 /** cudart 取自 ggml-org 的这个 build,CUDA 版本与我们的构建一致。 */
 const GGML_RELEASE = 'b10930';
