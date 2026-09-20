@@ -46,8 +46,8 @@ export interface SubtitleCueOptions {
 
 /** 句末标点:必断 */
 const HARD_BREAK = /[。!?!?…;;\n]/u;
-/** 逗号族:长句的可断点 */
-const SOFT_BREAK = /[,,、::·]/u;
+/** 逗号族:长句的可断点(全角 ，： 也要认,否则超过 MAX_UNITS 的中文长句只能硬切在词中间) */
+const SOFT_BREAK = /[，,、：:·]/u;
 /** 一条 cue 的目标单元数上限;超过就找逗号断,连逗号都没有才硬切 */
 const MAX_UNITS = 22;
 /** 软断点生效的最小前缀单元数:开头两三个字就断出去反而碎 */

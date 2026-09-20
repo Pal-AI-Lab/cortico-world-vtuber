@@ -54,6 +54,17 @@ describe('computeSubtitleCues', () => {
     expect(cues.map((c) => c.text).join('')).toBe(text);
   });
 
+  it('超过 MAX_UNITS 的全角逗号长句断在逗号上,不硬切进词中间、不留孤儿尾', () => {
+    // 45 单元、三个全角逗号。软断点不认全角时这里只能每 22 单元硬切:
+    // 切点落在「根本|停不下来」这种词中间,末尾还甩出一条单字的 cue「了。」
+    const text = '这句话特别长而且中间只有逗号，一直说一直说根本停不下来，直到最后才有一个句号收尾，大概就是这样了。';
+    expect(computeSubtitleCues(text, { ...EST }).map((c) => c.text)).toEqual([
+      '这句话特别长而且中间只有逗号，',
+      '一直说一直说根本停不下来，',
+      '直到最后才有一个句号收尾，大概就是这样了。',
+    ]);
+  });
+
   it('无标点长串按单元数硬切,不吞字', () => {
     const text = '一二三四五六七八九十'.repeat(5); // 50 个单元,零标点
     const cues = computeSubtitleCues(text, { ...EST });
