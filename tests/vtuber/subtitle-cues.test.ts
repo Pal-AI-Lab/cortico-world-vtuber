@@ -78,6 +78,22 @@ describe('computeSubtitleCues', () => {
     expect(computeSubtitleCues(cases[1], { ...EST }).map((c) => segmentUnits(c.text).length)).toEqual([22, 22, 7]);
   });
 
+  it('前缀正好满上限时下刀不先吃字符:不越上限、不甩出只有句号的 cue、不劈开语音标签', () => {
+    // 逗号前正好 22 单元:先追加再判满会把 '[' 带进这一条,标签被劈成两半
+    const text = '甲'.repeat(22) + '，' + '乙'.repeat(23) + '。';
+    expect(computeSubtitleCues(text, { ...EST }).map((c) => segmentUnits(c.text).length)).toEqual([22, 22, 1]);
+
+    const tagged =
+      '今天直播间来了很多新朋友大家晚上好欢迎来这里，[laughing]接下来我们一起看看今天准备的游戏希望大家都能玩得开心。';
+    const cues = computeSubtitleCues(tagged, { ...EST });
+    // 标签只控语音、不进字幕:劈开就没人剥得掉,观众会看到 "[" 与 "laughing]"
+    const shown = cues.map((c) => c.text).join('');
+    expect(shown).not.toContain('[');
+    expect(shown).not.toContain(']');
+    expect(shown).toContain('接下来我们一起看看今天准备的游戏');
+    expect(Math.max(...cues.map((c) => segmentUnits(c.text).length))).toBeLessThanOrEqual(22);
+  });
+
   it('无标点长串按单元数硬切,不吞字', () => {
     const text = '一二三四五六七八九十'.repeat(5); // 50 个单元,零标点
     const cues = computeSubtitleCues(text, { ...EST });

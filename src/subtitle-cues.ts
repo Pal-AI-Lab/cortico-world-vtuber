@@ -8,7 +8,8 @@
  * 显示文本移除仅供 TTS 使用的 [] 语气词；时间映射仍按原文单元下标计算，
  * 与对齐器共用 `segmentUnits` 切分。
  */
-import { countPauses, pauseMs, segmentUnits, type AlignedUnit, type PausePriors } from './align.ts';
+import { countPauses, pauseMs, segmentUnits, VOICE_TAG_SCAN, type AlignedUnit, type PausePriors } from './align.ts';
+import { resolveVoiceTag } from './voice-tags.ts';
 
 export interface SubtitleCue {
   /** 展示文本([] 语气词已剥) */
@@ -131,17 +132,39 @@ function chunkText(text: string): Chunk[] {
   return chunks;
 }
 
-/** 无标点长串:每 MAX_UNITS 个单元切一刀(按码点扫描,单元边界处下刀);carry 是已攒下的前缀,算进第一刀 */
+/**
+ * 下刀的粒度:一个 [] 语气词整体算一刀,其余按码点。语气词在单元表里是一整个单元,
+ * 切点落进它内部会把标签劈成 "[" 与 "laughing]" 两半,显示侧的剥除认不出来,观众就看到它了。
+ */
+function cutTokens(raw: string): string[] {
+  const cps = [...raw];
+  const out: string[] = [];
+  for (let i = 0; i < cps.length; i++) {
+    if (cps[i] === '[') {
+      const close = cps.indexOf(']', i + 1);
+      if (close > i && close - i <= VOICE_TAG_SCAN && resolveVoiceTag(cps.slice(i + 1, close).join(''))) {
+        out.push(cps.slice(i, close + 1).join(''));
+        i = close;
+        continue;
+      }
+    }
+    out.push(cps[i]);
+  }
+  return out;
+}
+
+/** 无标点长串:每 MAX_UNITS 个单元切一刀;carry 是已攒下的前缀,算进第一刀 */
 function hardSplit(raw: string, carry = ''): string[] {
   const out: string[] = [];
-  const cps = [...raw];
   let piece = carry;
-  for (const ch of cps) {
-    piece += ch;
-    if (segmentUnits(piece).length >= MAX_UNITS) {
+  for (const token of cutTokens(raw)) {
+    // 先判满再吃:满了还先追加一刀,这一片会顶过上限(前缀满 22 时实测 23/22/0,
+    // 末尾还甩出一条只有句号的 cue)
+    if (piece && segmentUnits(piece).length >= MAX_UNITS) {
       out.push(piece);
       piece = '';
     }
+    piece += token;
   }
   if (piece) out.push(piece);
   return out;
