@@ -21,6 +21,64 @@ describe('decodeWav / extractEnvelope', () => {
   it('拒绝非 wav 数据', () => {
     expect(() => decodeWav(new Uint8Array(64))).toThrow();
   });
+
+  /** 按给定格式搭一个 wav:fmt 块长度、格式 tag、位深可变,data 由调用方填 */
+  function buildWav(opts: { format: number; bits: number; fmtLen: number; channels?: number; data: Uint8Array }): Uint8Array {
+    const { format, bits, fmtLen, data } = opts;
+    const channels = opts.channels ?? 1;
+    const sr = 16000;
+    const buf = new ArrayBuffer(20 + fmtLen + 8 + data.length);
+    const v = new DataView(buf);
+    const str = (at: number, s: string): void => { for (let i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i)); };
+    str(0, 'RIFF');
+    v.setUint32(4, buf.byteLength - 8, true);
+    str(8, 'WAVE');
+    str(12, 'fmt ');
+    v.setUint32(16, fmtLen, true);
+    v.setUint16(20, format, true);
+    v.setUint16(22, channels, true);
+    v.setUint32(24, sr, true);
+    v.setUint32(28, (sr * channels * bits) / 8, true);
+    v.setUint16(32, (channels * bits) / 8, true);
+    v.setUint16(34, bits, true);
+    if (fmtLen >= 40) {
+      // EXTENSIBLE:cbSize + validBits + channelMask + SubFormat GUID(头两字节是真正的格式 tag)
+      v.setUint16(36, 22, true);
+      v.setUint16(38, bits, true);
+      v.setUint32(40, 0, true);
+      v.setUint16(44, format === 0xfffe ? 1 : format, true);
+    }
+    const dataAt = 20 + fmtLen;
+    str(dataAt, 'data');
+    v.setUint32(dataAt + 4, data.length, true);
+    new Uint8Array(buf).set(data, dataAt + 8);
+    return new Uint8Array(buf);
+  }
+
+  it('24bit PCM:按 3 字节小端解,负数带符号位,幅度与 16bit 对齐', () => {
+    const values = [0, 0.5, -0.5, -1]; // -1 专门盯符号位
+    const data = new Uint8Array(values.length * 3);
+    const v = new DataView(data.buffer);
+    values.forEach((x, i) => {
+      const n = Math.round(x * 8388607);
+      v.setUint8(i * 3, n & 0xff);
+      v.setUint8(i * 3 + 1, (n >> 8) & 0xff);
+      v.setUint8(i * 3 + 2, (n >> 16) & 0xff);
+    });
+    const decoded = decodeWav(buildWav({ format: 1, bits: 24, fmtLen: 16, data }));
+    expect(decoded.sampleRate).toBe(16000);
+    expect(Array.from(decoded.samples).map((x) => Math.round(x * 1000))).toEqual([0, 500, -500, -1000]);
+  });
+
+  it('EXTENSIBLE 容器按 SubFormat 走:16bit 与普通 PCM16 解出同一份样本', () => {
+    const samples = [0, 0.25, -0.75];
+    const pcm = new Int16Array(samples.map((x) => Math.round(x * 32767)));
+    const data = new Uint8Array(pcm.buffer);
+    const plain = decodeWav(buildWav({ format: 1, bits: 16, fmtLen: 16, data }));
+    const ext = decodeWav(buildWav({ format: 0xfffe, bits: 16, fmtLen: 40, data }));
+    expect(ext.sampleRate).toBe(plain.sampleRate);
+    expect(Array.from(ext.samples)).toEqual(Array.from(plain.samples));
+  });
 });
 
 describe('TtsClient', () => {

@@ -67,7 +67,7 @@ export interface DecodedWav {
   durationMs: number;
 }
 
-/** RIFF/WAVE 解析:PCM16 / PCM32f,多声道并为单声道 */
+/** RIFF/WAVE 解析:PCM16 / PCM24 / PCM32f,多声道并为单声道;EXTENSIBLE 容器按它的子格式走 */
 export function decodeWav(bytes: Uint8Array): DecodedWav {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.length < 44 || view.getUint32(0, false) !== 0x52494646 || view.getUint32(8, false) !== 0x57415645) {
@@ -90,6 +90,9 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
       channels = view.getUint16(body + 2, true);
       sampleRate = view.getUint32(body + 4, true);
       bitsPerSample = view.getUint16(body + 14, true);
+      // WAVE_FORMAT_EXTENSIBLE:真正的编码在 cbSize 之后的 SubFormat GUID 头两个字节
+      // (ffmpeg 写 24bit 或三声道以上时会给这个容器;扩展块不完整就按原样落到"不支持")
+      if (format === 0xfffe && chunkLen >= 40) format = view.getUint16(body + 24, true);
     } else if (chunkId === 0x64617461) {
       // 'data'
       dataStart = body;
@@ -104,6 +107,13 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
   if (format === 1 && bitsPerSample === 16) {
     frames = Math.floor(dataLen / 2 / channels);
     read = (f, c) => view.getInt16(dataStart + (f * channels + c) * 2, true) / 32768;
+  } else if (format === 1 && bitsPerSample === 24) {
+    frames = Math.floor(dataLen / 3 / channels);
+    read = (f, c) => {
+      const at = dataStart + (f * channels + c) * 3;
+      // 高字节按有符号读,负数自然带出符号位
+      return (view.getUint8(at) | (view.getUint8(at + 1) << 8) | (view.getInt8(at + 2) << 16)) / 8388608;
+    };
   } else if (format === 3 && bitsPerSample === 32) {
     frames = Math.floor(dataLen / 4 / channels);
     read = (f, c) => view.getFloat32(dataStart + (f * channels + c) * 4, true);
