@@ -16,12 +16,14 @@ const TTS_POLL_TICKS = 90;
 const TTS_TONE: Record<string, RowTone> = {
   running: 'on',
   starting: 'warn',
+  stopping: 'warn',
   error: 'off',
   stopped: 'off',
 };
 const TTS_WORD: Record<string, string> = {
   running: '运行中',
   starting: '启动中',
+  stopping: '停止中',
   error: '异常',
   stopped: '未启动',
 };
@@ -111,7 +113,7 @@ export const mountPanel: ConsolePanel = {
           .filter(Boolean)
           .join(' · '),
       );
-      btnStart.disabled = st.phase === 'starting' || st.phase === 'running';
+      btnStart.disabled = st.phase === 'starting' || st.phase === 'running' || st.phase === 'stopping';
       btnStop.disabled = st.phase === 'stopped' && !st.pid;
     };
 

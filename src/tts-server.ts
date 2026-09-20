@@ -1,6 +1,9 @@
 /**
  * VoxCPM2 server 进程管理:spawn llama-tts-server.exe 并轮询 health。
  * 控制台的启动/停止/测试按钮经 web 端点打到这里。
+ *
+ * 进程句柄、阶段、世代号是一套的:`proc` 非空就意味着"系统里还有一个我们起的进程",
+ * 收尾必须走到它真的退出为止(见 shutdown),否则新进程会 bind 不上旧进程还占着的端口。
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -8,7 +11,10 @@ import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Logger } from 'cortico/core/types.ts';
 
-export type TtsServerPhase = 'stopped' | 'starting' | 'running' | 'error';
+export type TtsServerPhase = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
+
+/** 收尾时等 SIGTERM 生效的时长;到点还没退就 SIGKILL */
+const SHUTDOWN_GRACE_MS = 3000;
 
 export interface TtsServerState {
   phase: TtsServerPhase;
@@ -84,6 +90,13 @@ export class TtsServerManager {
   private stderrTail = '';
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private readonly fetchImpl: typeof fetch;
+  /**
+   * 世代号:每次 start/stop 自增。健康检查的回应是异步回来的,回来先核对这个号——
+   * 不是当前这一代就整个丢掉(连定时器都不许碰,那可能是新一代的)。
+   */
+  private gen = 0;
+  /** 在途的收尾;同一个进程的重复收尾合流到它,免得后一次在进程还没死时就返回 */
+  private pendingShutdown: Promise<void> | null = null;
 
   constructor(opts: TtsServerOptions) {
     this.opts = opts;
@@ -107,13 +120,16 @@ export class TtsServerManager {
 
   /** 拉起进程并开始 health 轮询;已在跑则原样返回。同步返回,结果看 state()。 */
   start(): TtsServerState {
-    if (this.phase === 'starting' || this.phase === 'running') return this.state();
+    if (this.phase !== 'stopped' && this.phase !== 'error') return this.state();
+    // 上一代还没退干净(加载超时那条路正在收):此刻 spawn 会撞它占着的端口,等它走完再点
+    if (this.proc) return this.state();
     const launch = this.resolveLaunch();
     if ('error' in launch) {
       this.phase = 'error';
       this.detail = launch.error;
       return this.state();
     }
+    this.gen++;
     this.detail = null;
     this.stderrTail = '';
     this.phase = 'starting';
@@ -149,7 +165,8 @@ export class TtsServerManager {
     proc.on('exit', (code) => {
       if (this.proc !== proc) return;
       this.proc = null;
-      if (this.phase === 'stopped') return;
+      // 只有"我们还在等它活着"时的退出才算异常:停掉(check)与加载超时收尾(fail 已给过原因)都不是新闻
+      if (this.phase !== 'starting' && this.phase !== 'running') return;
       this.fail(
         `进程退出 code=${code}${this.stderrTail ? `;stderr尾部: ${this.stderrTail.slice(-400)}` : ''}`,
         { event: 'exit', data: { exitCode: code } },
@@ -162,29 +179,44 @@ export class TtsServerManager {
 
   async stop(): Promise<TtsServerState> {
     this.clearHealthTimer();
+    this.gen++;
     const proc = this.proc;
+    // 进程还在时不能自称 stopped:start 会据此放行,而端口还占着
+    this.phase = proc ? 'stopping' : 'stopped';
+    this.detail = null;
+    await this.shutdown(proc);
     this.proc = null;
     this.phase = 'stopped';
-    this.detail = null;
-    if (proc && proc.exitCode === null) {
-      proc.kill();
-      await new Promise<void>((resolve) => {
-        const force = setTimeout(() => {
-          try {
-            proc.kill('SIGKILL');
-          } catch {
-            /* 已退出 */
-          }
-          resolve();
-        }, 3000);
-        proc.once('exit', () => {
-          clearTimeout(force);
-          resolve();
-        });
-      });
-      this.opts.log.info('TTS server 已停止');
-    }
+    if (proc) this.opts.log.info('TTS server 已停止');
     return this.state();
+  }
+
+  /**
+   * 收尾:先 SIGTERM,{@link SHUTDOWN_GRACE_MS} 内不退再 SIGKILL,并且**等它真的退出**才返回。
+   * 同一个进程重复调用合流到同一次收尾——stop 连点、stop 与加载超时收尾撞上都会走到这里;
+   * 各等各的话,后一次可能在进程还没死时就返回,start 随即撞端口。
+   * 不改自身状态(proc/phase 归调用方管),调用方负责在返回后把 proc 清掉。
+   */
+  private shutdown(proc: ChildProcess | null): Promise<void> {
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
+    this.pendingShutdown ??= (async () => {
+      const exited = new Promise<void>((resolve) => proc.once('exit', () => resolve()));
+      proc.kill();
+      const force = setTimeout(() => {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          /* 已退出 */
+        }
+      }, SHUTDOWN_GRACE_MS);
+      try {
+        await exited;
+      } finally {
+        clearTimeout(force);
+        this.pendingShutdown = null;
+      }
+    })();
+    return this.pendingShutdown;
   }
 
   /** 单次健康探测(也用于探测外部自行启动的 server) */
@@ -289,16 +321,21 @@ export class TtsServerManager {
 
   private beginHealthPolling(): void {
     this.clearHealthTimer();
+    const gen = this.gen;
     const startedAt = Date.now();
     const interval = this.opts.healthIntervalMs ?? 2000;
     const timeout = this.opts.healthTimeoutMs ?? 180_000;
     this.healthTimer = setInterval(() => {
       void (async () => {
+        // 过期回执:连定时器都不许碰,那可能是新一代的
+        if (gen !== this.gen) return;
         if (this.phase !== 'starting') {
           this.clearHealthTimer();
           return;
         }
         if (await this.probe()) {
+          // 等回应的这段时间里可能已经被停掉/换过一代,那这次"活着"就不算数
+          if (gen !== this.gen || this.phase !== 'starting') return;
           this.phase = 'running';
           this.detail = null;
           this.clearHealthTimer();
@@ -306,17 +343,15 @@ export class TtsServerManager {
           return;
         }
         if (Date.now() - startedAt > timeout) {
+          const proc = this.proc;
           this.fail('health 检查超时(模型加载过久或端口不对)');
-          void this.stopOrphan();
+          // 卡住的进程收到底:等它真退出,清不掉就不清——它握着显存,句柄得留着让人再停
+          void this.shutdown(proc).then(() => {
+            if (this.proc === proc) this.proc = null;
+          });
         }
       })();
     }, interval);
-  }
-
-  private async stopOrphan(): Promise<void> {
-    const proc = this.proc;
-    this.proc = null;
-    if (proc && proc.exitCode === null) proc.kill();
   }
 
   private fail(detail: string, record: { event?: string; data?: Record<string, unknown> } = {}): void {
