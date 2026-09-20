@@ -58,6 +58,7 @@ import { AlignerClient, countPauses, segmentUnits, type AlignedUnit, type AlignR
 import {
   decodeWav,
   pcm16ToWav,
+  samplesToPcm16Wav,
   StreamingEnvelope,
   TtsClient,
   type TtsPiece,
@@ -2560,13 +2561,7 @@ export class VtuberWorld implements World {
     if (p.refAudio) {
       const path = this.voicePath(p.refAudio);
       if (this.refAudioCache?.path !== path) {
-        try {
-          this.refAudioCache = path
-            ? { path, b64: readFileSync(path).toString('base64') }
-            : null;
-        } catch {
-          this.refAudioCache = null; // 文件没了:退回无参考音频
-        }
+        this.refAudioCache = path ? this.loadVoice(path) : null;
       }
       if (this.refAudioCache) {
         out.referenceAudioB64 = this.refAudioCache.b64;
@@ -2574,6 +2569,26 @@ export class VtuberWorld implements World {
       }
     }
     return out;
+  }
+
+  /**
+   * 声线文件 → 请求里那份 base64。服务端读 wav 只认老容器的 16bit(24bit 用 int16 指针读、
+   * EXTENSIBLE 直接拒收),所以凡是别的位深/容器都在这里规范化成单声道 PCM16;手工丢进 voices/
+   * 的文件也走这条,不指望导入那次校验。采样率沿用源文件,服务端自己重采样。
+   */
+  private loadVoice(path: string): { path: string; b64: string } | null {
+    let bytes: Uint8Array;
+    try {
+      bytes = readFileSync(path);
+    } catch {
+      return null; // 文件没了:退回无参考音频
+    }
+    const decoded = decodeWav(bytes);
+    const wav =
+      decoded.format === 1 && decoded.bitsPerSample === 16 && decoded.channels === 1 && !decoded.extensible
+        ? bytes
+        : samplesToPcm16Wav(decoded.samples, decoded.sampleRate);
+    return { path, b64: Buffer.from(wav).toString('base64') };
   }
 
   /**
