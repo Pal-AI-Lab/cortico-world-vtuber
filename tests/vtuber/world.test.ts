@@ -1317,13 +1317,19 @@ describe('VtuberWorld', () => {
       (mod2 as unknown as { vts: { ensureConnected(): void } }).vts.ensureConnected();
 
       await waitFor(() => mod2.modelConsole().state().how === 'matched');
+      // 名单那一趟在定档之后才发:how 变 matched 时请求可能还在路上,
+      // 在这里就数条数会数到 0(并行的测试文件一多必现)。等它的落地日志再数。
+      await waitFor(() => host2.logs.some((l) => l.msg.includes('实机输入参数')));
       const st = mod2.modelConsole().state();
       expect(st.vtsModelName).toBe('FixtureModel');
       expect(st.profileFile).toBe(join(live2d, 'FixtureModel', 'cortico.profile.json'));
       // 定档日志标明按模型名匹配的结果。
       expect(host2.logs.some((l) => l.msg.includes('模型「FixtureModel」→ 档案') && l.msg.includes('按模型名匹配')))
         .toBe(true);
-      // 定档与名单各只查一遍:backend 那份订阅走的是同一次同步,不再自己拉名单
+      // 定档与名单各只查一遍:三个入口(start 的补齐、backend 的 resyncKnown、onConnected 订阅)
+      // 共用同一次同步。多给一个轮询周期,漏出来的第二份才有机会现形
+      await new Promise((r) => setTimeout(r, 100));
+      expect(host2.logs.filter((l) => l.msg.includes('模型「FixtureModel」→ 档案'))).toHaveLength(1);
       expect(vts.received.filter((t) => t === 'CurrentModelRequest')).toHaveLength(1);
       expect(vts.received.filter((t) => t === 'InputParameterListRequest')).toHaveLength(1);
     } finally {
