@@ -408,6 +408,9 @@ describe('VtuberWorld', () => {
     // 只重合成一次:第二次仍有死气就照常播出,宁可念得不完美,不要哑掉
     await new Promise<void>((r) => setTimeout(r, 120));
     expect(tries()).toBe(2);
+    // 重试得是另一条 take:同一 seed 下把同一份请求发两遍,服务端给的是逐字节相同的音频
+    const takes = ttsBodies.filter((b) => b.input === '带死气的一句。');
+    expect(takes[1].seed).not.toBe(takes[0].seed);
     await waitFor(() => stage.events.some((m) => m.type === 'subtitle' && m.text === '带死气的一句。'));
     await mod.tools().find((t) => t.name === 'vtuber_interrupt')!.handler({}, { role: 'main', log: host.log });
   });
@@ -1127,6 +1130,10 @@ describe('VtuberWorld', () => {
     expect(String(body.reference_audio).length).toBeGreaterThan(0);
     expect(body.prompt_text).toBe('参考音频的转写文本');
     expect(body).toMatchObject({ seed: 7, cfg_value: 10, temperature: 0.5 });
+    // seed 上界留一格:静默重试要拿 seed+1 再发一次请求,+1 也得落在 int32 内
+    const top = c.setProfile({ seed: 2 ** 31 - 1 });
+    expect(top.seed).toBe(2 ** 31 - 2);
+    expect(top.seed + 1).toBe(2 ** 31 - 1);
   });
 
   it('外置声线目录与 Live2D 部署记录热更新,同名声线随目录重读', async () => {

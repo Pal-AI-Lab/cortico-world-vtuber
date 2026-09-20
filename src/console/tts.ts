@@ -41,7 +41,7 @@ const AUDIO_ACCEPT = '.wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wma,audio/*';
  * (面板改不了那份判断),这里只是让数字框的箭头与浏览器校验落在同一个区间里。
  */
 const LIMITS = {
-  seed: { min: 0, max: 2 ** 31 - 1, step: 1 },
+  seed: { min: 0, max: 2 ** 31 - 2, step: 1 },
   cfgValue: { min: 0.1, max: 10, step: 0.1 },
   inferenceTimesteps: { min: 1, max: 100, step: 1 },
   maxSteps: { min: 10, max: 2000, step: 10 },
