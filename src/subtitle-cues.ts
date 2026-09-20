@@ -113,9 +113,13 @@ function chunkText(text: string): Chunk[] {
   };
   for (const atom of atoms) {
     const n = segmentUnits(atom.raw).length;
-    if (n > MAX_UNITS && !acc) {
-      // 整段没有可断标点:按单元数硬切
-      for (const piece of hardSplit(atom.raw)) emit(piece);
+    if (n > MAX_UNITS) {
+      // 整段没有可断标点:按单元数硬切。攒下的前缀并进第一刀——判据是"这一刀切多长",
+      // 不是"前面有没有东西";否则一条长原子会把前面攒的一起拖成一条远超上限的 cue
+      const pieces = hardSplit(atom.raw, acc);
+      acc = '';
+      accUnits = 0;
+      for (const piece of pieces) emit(piece);
       continue;
     }
     if (accUnits >= MIN_UNITS && accUnits + n > MAX_UNITS) emitAcc();
@@ -127,11 +131,11 @@ function chunkText(text: string): Chunk[] {
   return chunks;
 }
 
-/** 无标点长串:每 MAX_UNITS 个单元切一刀(按码点扫描,单元边界处下刀) */
-function hardSplit(raw: string): string[] {
+/** 无标点长串:每 MAX_UNITS 个单元切一刀(按码点扫描,单元边界处下刀);carry 是已攒下的前缀,算进第一刀 */
+function hardSplit(raw: string, carry = ''): string[] {
   const out: string[] = [];
   const cps = [...raw];
-  let piece = '';
+  let piece = carry;
   for (const ch of cps) {
     piece += ch;
     if (segmentUnits(piece).length >= MAX_UNITS) {

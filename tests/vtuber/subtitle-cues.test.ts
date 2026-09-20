@@ -65,6 +65,19 @@ describe('computeSubtitleCues', () => {
     ]);
   });
 
+  it('超长原子照旧硬切:前面攒着半句也不许把上限当摆设', () => {
+    // 全角逗号进软断点后,"攒了东西就跳过硬切"会让整条长串原样出一条 cue(实测 47 单元)
+    const cases = ['你好，' + '甲'.repeat(45) + '。', '今天真的很好，' + '甲'.repeat(45) + '。'];
+    for (const text of cases) {
+      const cues = computeSubtitleCues(text, { ...EST });
+      expect(Math.max(...cues.map((c) => segmentUnits(c.text).length))).toBeLessThanOrEqual(22);
+      expect(cues.map((c) => c.text).join('')).toBe(text);
+    }
+    // 3 单元的短前缀并进第一刀,不单甩一条碎 cue
+    expect(computeSubtitleCues(cases[0], { ...EST }).map((c) => segmentUnits(c.text).length)).toEqual([22, 22, 3]);
+    expect(computeSubtitleCues(cases[1], { ...EST }).map((c) => segmentUnits(c.text).length)).toEqual([22, 22, 7]);
+  });
+
   it('无标点长串按单元数硬切,不吞字', () => {
     const text = '一二三四五六七八九十'.repeat(5); // 50 个单元,零标点
     const cues = computeSubtitleCues(text, { ...EST });
