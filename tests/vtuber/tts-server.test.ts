@@ -152,6 +152,67 @@ describe('TtsServerManager', () => {
     expect(second.pid).toBe(first.pid);
   });
 
+  it('拉起失败(异步 error)后不留句柄:改好命令再点启动就能起来', async () => {
+    const port = await freePort();
+    const script = `require('node:http').createServer((req,res)=>{res.end('{"ok":true}')}).listen(${port},'127.0.0.1')`;
+    const override = { command: join(tmpdir(), 'no-such-llama-tts-server'), args: [] as string[] };
+    mgr = new TtsServerManager({
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+      port,
+      log: nullLogger(),
+      commandOverride: override,
+      healthIntervalMs: 50,
+      healthTimeoutMs: 5000,
+    });
+    mgr.start();
+    await waitFor(() => mgr!.state().phase === 'error');
+    expect(mgr.state().pid).toBeNull();
+    // 残留句柄会把这次重试挡在门外(以为"上一代还没退"),修好命令也该起得来
+    override.command = process.execPath;
+    override.args = ['-e', script];
+    expect(mgr.start().phase).toBe('starting');
+    await waitFor(() => mgr!.state().phase === 'running');
+  });
+
+  it('过期的那次"失败"回执不许杀新一代:超时判据只看当前这一代', async () => {
+    const port = await freePort();
+    let mode: 'slow-fail' | 'ok' = 'slow-fail';
+    const health = createServer((_req, res) => {
+      if (mode === 'ok') {
+        res.end('{"ok":true}');
+        return;
+      }
+      // 挂住 400ms 再以 503 收场:回执必然晚于超时阈值(120ms)到达
+      setTimeout(() => {
+        res.statusCode = 503;
+        res.end('{}');
+      }, 400);
+    });
+    await new Promise<void>((resolve) => health.listen(port, '127.0.0.1', () => resolve()));
+    try {
+      mgr = new TtsServerManager({
+        runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+        port,
+        log: nullLogger(),
+        commandOverride: { command: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] },
+        healthIntervalMs: 50,
+        healthTimeoutMs: 120,
+      });
+      mgr.start();
+      await new Promise((r) => setTimeout(r, 150)); // 这一次检查已在途,阈值也已过
+      await mgr.stop();
+      const restarted = mgr.start();
+      mode = 'ok';
+      await waitFor(() => mgr!.state().phase === 'running');
+      const pid = restarted.pid;
+      await new Promise((r) => setTimeout(r, 500)); // 等旧回执送到
+      expect(mgr.state().phase).toBe('running');
+      expect(mgr.state().pid).toBe(pid);
+    } finally {
+      await new Promise<void>((resolve) => health.close(() => resolve()));
+    }
+  });
+
   it('检查在途时按停止:那次"活着"的回执不许把状态写回 running', async () => {
     const port = await freePort();
     // 同端口上另有一个应答者(不属于我们起的进程,所以"停止"杀不掉它):

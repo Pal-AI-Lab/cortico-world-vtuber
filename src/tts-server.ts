@@ -160,6 +160,8 @@ export class TtsServerManager {
     });
     proc.on('error', (err) => {
       if (this.proc !== proc) return;
+      // 拉起失败就没有这个进程了:句柄留着,start 会以为"上一代还没退"而拒绝重试
+      this.proc = null;
       this.fail(spawnFailDetail(err, launch.command));
     });
     proc.on('exit', (code) => {
@@ -333,9 +335,11 @@ export class TtsServerManager {
           this.clearHealthTimer();
           return;
         }
-        if (await this.probe()) {
-          // 等回应的这段时间里可能已经被停掉/换过一代,那这次"活着"就不算数
-          if (gen !== this.gen || this.phase !== 'starting') return;
+        const alive = await this.probe();
+        // 等回应的这段时间里可能已经被停掉/换过一代:这次的结论(不论死活)都不算数。
+        // 死在下面那条超时路上的话,取到的 this.proc 已是新一代的进程
+        if (gen !== this.gen || this.phase !== 'starting') return;
+        if (alive) {
           this.phase = 'running';
           this.detail = null;
           this.clearHealthTimer();
