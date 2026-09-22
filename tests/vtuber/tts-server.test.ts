@@ -256,9 +256,13 @@ describe('TtsServerManager', () => {
     expect(pid).not.toBeNull();
     await waitFor(() => mgr!.state().phase === 'error');
     expect(mgr.state().detail).toContain('超时');
-    // 宽限期里进程还在:句柄留着(pid 报得出来,停止按钮还停得到),start 不许再拉一个
-    expect(mgr.state().pid).toBe(pid);
-    expect(mgr.start().pid).toBe(pid);
+    // Windows 上 kill() 就是 TerminateProcess,子进程的 SIGTERM 处理器不生效,进程当场就退:
+    // 没有宽限期可测,只剩下面"最终收到真死"那条
+    if (process.platform !== 'win32') {
+      // 宽限期里进程还在:句柄留着(pid 报得出来,停止按钮还停得到),start 不许再拉一个
+      expect(mgr.state().pid).toBe(pid);
+      expect(mgr.start().pid).toBe(pid);
+    }
     // 3 秒宽限到点强杀,pid 归 null
     await waitFor(() => mgr!.state().pid === null, 8000);
   });
