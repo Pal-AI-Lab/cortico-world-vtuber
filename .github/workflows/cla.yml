@@ -30,7 +30,7 @@ jobs:
           path-to-signatures: signatures/v1/cla.json
           path-to-document: https://github.com/Pal-AI-Lab/cortico-world-vtuber/blob/main/CLA.md
           custom-pr-sign-comment: '我已阅读 CLA 文件,并在此签署 CLA'
-          custom-notsigned-prcomment: '感谢你的 PR。这个包用 AGPL-3.0-or-later 发布,合并之前需要你签一份 CLA——你保留自己那部分的版权,同时允许项目以任何许可再授权这些贡献。请在这个 PR 里回一条评论,内容正好是:'
+          custom-notsigned-prcomment: '感谢你的 PR。这个包用 AGPL-3.0-or-later 发布,合并之前需要你签一份 [CLA](https://github.com/Pal-AI-Lab/cortico-world-vtuber/blob/main/CLA.md)——你保留自己那部分的版权,同时允许项目以任何许可再授权这些贡献。请在这个 PR 里回一条评论,内容正好是:'
           custom-allsigned-prcomment: '这个 PR 的贡献者都已签署 CLA。'
           create-file-commit-message: 'chore(cla): 建立签名记录文件'
           signed-commit-message: 'chore(cla): $contributorName 签署了 CLA(#$pullRequestNo)'
