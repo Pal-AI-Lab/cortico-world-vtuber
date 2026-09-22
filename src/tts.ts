@@ -61,13 +61,23 @@ export class Envelope {
   }
 }
 
-export interface DecodedWav {
+/** 解码后的单声道样本(与容器无关的那部分) */
+export interface PcmAudio {
   samples: Float32Array;
   sampleRate: number;
   durationMs: number;
 }
 
-/** RIFF/WAVE 解析:PCM16 / PCM32f,多声道并为单声道 */
+export interface DecodedWav extends PcmAudio {
+  /** 源文件的编码事实:要不要规范成 PCM16 再发由它决定(服务端只按 16bit 读) */
+  format: number;
+  bitsPerSample: number;
+  channels: number;
+  /** 容器是 WAVE_FORMAT_EXTENSIBLE:子格式即便写着 PCM16,服务端也只认 0x0001 那种老容器 */
+  extensible: boolean;
+}
+
+/** RIFF/WAVE 解析:PCM16 / PCM24 / PCM32f,多声道并为单声道;EXTENSIBLE 容器按它的子格式走 */
 export function decodeWav(bytes: Uint8Array): DecodedWav {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.length < 44 || view.getUint32(0, false) !== 0x52494646 || view.getUint32(8, false) !== 0x57415645) {
@@ -78,6 +88,7 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
   let channels = 1;
   let sampleRate = 0;
   let bitsPerSample = 0;
+  let extensible = false;
   let dataStart = -1;
   let dataLen = 0;
   while (offset + 8 <= bytes.length) {
@@ -90,6 +101,12 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
       channels = view.getUint16(body + 2, true);
       sampleRate = view.getUint32(body + 4, true);
       bitsPerSample = view.getUint16(body + 14, true);
+      // WAVE_FORMAT_EXTENSIBLE:真正的编码在 cbSize 之后的 SubFormat GUID 头两个字节
+      // (ffmpeg 写 24bit 或三声道以上时会给这个容器;扩展块不完整就按原样落到"不支持")
+      if (format === 0xfffe && chunkLen >= 40) {
+        extensible = true;
+        format = view.getUint16(body + 24, true);
+      }
     } else if (chunkId === 0x64617461) {
       // 'data'
       dataStart = body;
@@ -104,6 +121,13 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
   if (format === 1 && bitsPerSample === 16) {
     frames = Math.floor(dataLen / 2 / channels);
     read = (f, c) => view.getInt16(dataStart + (f * channels + c) * 2, true) / 32768;
+  } else if (format === 1 && bitsPerSample === 24) {
+    frames = Math.floor(dataLen / 3 / channels);
+    read = (f, c) => {
+      const at = dataStart + (f * channels + c) * 3;
+      // 高字节按有符号读,负数自然带出符号位
+      return (view.getUint8(at) | (view.getUint8(at + 1) << 8) | (view.getInt8(at + 2) << 16)) / 8388608;
+    };
   } else if (format === 3 && bitsPerSample === 32) {
     frames = Math.floor(dataLen / 4 / channels);
     read = (f, c) => view.getFloat32(dataStart + (f * channels + c) * 4, true);
@@ -116,7 +140,7 @@ export function decodeWav(bytes: Uint8Array): DecodedWav {
     for (let c = 0; c < channels; c++) acc += read(f, c);
     samples[f] = acc / channels;
   }
-  return { samples, sampleRate, durationMs: (frames / sampleRate) * 1000 };
+  return { samples, sampleRate, durationMs: (frames / sampleRate) * 1000, format, bitsPerSample, channels, extensible };
 }
 
 const ENVELOPE_HOP_MS = 20;
@@ -197,7 +221,7 @@ export class StreamingEnvelope {
 }
 
 /** RMS 包络:20ms hop,p95 归一,快攻慢放平滑(嘴形不抖) */
-export function extractEnvelope(wav: DecodedWav): Envelope {
+export function extractEnvelope(wav: PcmAudio): Envelope {
   const hop = Math.max(1, Math.round((wav.sampleRate * ENVELOPE_HOP_MS) / 1000));
   const n = Math.ceil(wav.samples.length / hop);
   const rms = new Float32Array(n);
@@ -450,6 +474,17 @@ export class TtsClient {
       ...(truncated ? { truncated } : {}),
     };
   }
+}
+
+/** 浮点样本 → 单声道 PCM16 wav:声线库的规范形,与 ffmpeg 转码产物同规格(采样率沿用源文件,服务端自己重采样) */
+export function samplesToPcm16Wav(samples: Float32Array, sampleRate: number): Uint8Array {
+  const pcm = new Uint8Array(samples.length * 2);
+  const view = new DataView(pcm.buffer);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(i * 2, Math.round(v * 32767), true);
+  }
+  return pcm16ToWav([pcm], sampleRate);
 }
 
 /** PCM16LE 单声道分块 → 完整 wav 字节(流式重组与前缀对齐都用) */

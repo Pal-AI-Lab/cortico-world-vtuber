@@ -19,7 +19,7 @@ import {
 } from '../../src/world.ts';
 import { EXAMPLE_PACK_DIR } from '../../src/pack.ts';
 import { decodeWav } from '../../src/tts.ts';
-import { encodeAudio, fixtureProfileJson, makeWav, recordingLogger, writeProfileDir, type LogLine } from './helpers.ts';
+import { encodeAudio, fixtureProfileJson, makeRawWav, makeWav, recordingLogger, writeProfileDir, type LogLine } from './helpers.ts';
 
 const ffmpegExe = findFfmpeg();
 
@@ -408,6 +408,9 @@ describe('VtuberWorld', () => {
     // 只重合成一次:第二次仍有死气就照常播出,宁可念得不完美,不要哑掉
     await new Promise<void>((r) => setTimeout(r, 120));
     expect(tries()).toBe(2);
+    // 重试得是另一条 take:同一 seed 下把同一份请求发两遍,服务端给的是逐字节相同的音频
+    const takes = ttsBodies.filter((b) => b.input === '带死气的一句。');
+    expect(takes[1].seed).not.toBe(takes[0].seed);
     await waitFor(() => stage.events.some((m) => m.type === 'subtitle' && m.text === '带死气的一句。'));
     await mod.tools().find((t) => t.name === 'vtuber_interrupt')!.handler({}, { role: 'main', log: host.log });
   });
@@ -1127,6 +1130,10 @@ describe('VtuberWorld', () => {
     expect(String(body.reference_audio).length).toBeGreaterThan(0);
     expect(body.prompt_text).toBe('参考音频的转写文本');
     expect(body).toMatchObject({ seed: 7, cfg_value: 10, temperature: 0.5 });
+    // seed 上界留一格:静默重试要拿 seed+1 再发一次请求,+1 也得落在 int32 内
+    const top = c.setProfile({ seed: 2 ** 31 - 1 });
+    expect(top.seed).toBe(2 ** 31 - 2);
+    expect(top.seed + 1).toBe(2 ** 31 - 1);
   });
 
   it('外置声线目录与 Live2D 部署记录热更新,同名声线随目录重读', async () => {
@@ -1162,6 +1169,54 @@ describe('VtuberWorld', () => {
     } finally {
       rmSync(voicesA, { recursive: true, force: true });
       rmSync(voicesB, { recursive: true, force: true });
+    }
+  });
+
+  it('服务端读不了的参考音频(24bit 与 EXTENSIBLE)在发请求前规范成单声道 PCM16', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vtuber-voices-canon-'));
+    // 三个样本:满幅负、零、半幅正。24bit 与 EXTENSIBLE 各一份,服务端两种都读不对
+    const pcm24 = new Uint8Array(9);
+    const dv = new DataView(pcm24.buffer);
+    [-8388608, 0, 4194304].forEach((n, i) => {
+      dv.setUint8(i * 3, n & 0xff);
+      dv.setUint8(i * 3 + 1, (n >> 8) & 0xff);
+      dv.setUint8(i * 3 + 2, (n >> 16) & 0xff);
+    });
+    const wav24 = makeRawWav({ format: 1, bits: 24, fmtLen: 16, data: pcm24 });
+    const wavExt = makeRawWav({ format: 0xfffe, bits: 16, fmtLen: 40, data: new Uint8Array(new Int16Array([-32767, 0, 16384]).buffer) });
+    const wavPlain = makeWav([-1, 0, 0.5]);
+    writeFileSync(join(dir, 'v24.wav'), wav24);
+    writeFileSync(join(dir, 'vext.wav'), wavExt);
+    writeFileSync(join(dir, 'vplain.wav'), wavPlain);
+    const mod2 = new VtuberWorld({
+      streamPort: 0,
+      ttsUrl: `http://127.0.0.1:${(tts.address() as { port: number }).port}`,
+      ttsVoicesDir: () => dir,
+      live2dDir: () => 'D:\\VTubeStudio\\Models\\Corti',
+      audioDevice: () => 'none',
+    });
+    try {
+      const console = mod2.ttsConsole();
+      const sentOf = async (file: string): Promise<Uint8Array> => {
+        console.setProfile({ refAudio: file });
+        await console.test('规范化的参考');
+        return new Uint8Array(Buffer.from(String(ttsBodies[ttsBodies.length - 1].reference_audio), 'base64'));
+      };
+
+      const sent24 = await sentOf('v24.wav');
+      expect(Buffer.from(sent24).equals(Buffer.from(wav24))).toBe(false);
+      const d24 = decodeWav(sent24);
+      expect([d24.format, d24.bitsPerSample, d24.channels, d24.extensible]).toEqual([1, 16, 1, false]);
+      expect(Array.from(d24.samples).map((x) => Math.round(x * 1000))).toEqual([-1000, 0, 500]);
+
+      // EXTENSIBLE 里即便写着 PCM16 子格式,服务端也按 audio_format != 1 拒收:换成老容器
+      const dExt = decodeWav(await sentOf('vext.wav'));
+      expect([dExt.format, dExt.bitsPerSample, dExt.extensible]).toEqual([1, 16, false]);
+
+      // 本来就是单声道 PCM16 的原样透传,不做无谓的重编码
+      expect(Buffer.from(await sentOf('vplain.wav')).equals(Buffer.from(wavPlain))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -1262,13 +1317,19 @@ describe('VtuberWorld', () => {
       (mod2 as unknown as { vts: { ensureConnected(): void } }).vts.ensureConnected();
 
       await waitFor(() => mod2.modelConsole().state().how === 'matched');
+      // 名单那一趟在定档之后才发:how 变 matched 时请求可能还在路上,
+      // 在这里就数条数会数到 0(并行的测试文件一多必现)。等它的落地日志再数。
+      await waitFor(() => host2.logs.some((l) => l.msg.includes('实机输入参数')));
       const st = mod2.modelConsole().state();
       expect(st.vtsModelName).toBe('FixtureModel');
       expect(st.profileFile).toBe(join(live2d, 'FixtureModel', 'cortico.profile.json'));
       // 定档日志标明按模型名匹配的结果。
       expect(host2.logs.some((l) => l.msg.includes('模型「FixtureModel」→ 档案') && l.msg.includes('按模型名匹配')))
         .toBe(true);
-      // 定档与名单各只查一遍:backend 那份订阅走的是同一次同步,不再自己拉名单
+      // 定档与名单各只查一遍:三个入口(start 的补齐、backend 的 resyncKnown、onConnected 订阅)
+      // 共用同一次同步。多给一个轮询周期,漏出来的第二份才有机会现形
+      await new Promise((r) => setTimeout(r, 100));
+      expect(host2.logs.filter((l) => l.msg.includes('模型「FixtureModel」→ 档案'))).toHaveLength(1);
       expect(vts.received.filter((t) => t === 'CurrentModelRequest')).toHaveLength(1);
       expect(vts.received.filter((t) => t === 'InputParameterListRequest')).toHaveLength(1);
     } finally {

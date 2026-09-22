@@ -8,7 +8,8 @@
  * 显示文本移除仅供 TTS 使用的 [] 语气词；时间映射仍按原文单元下标计算，
  * 与对齐器共用 `segmentUnits` 切分。
  */
-import { countPauses, pauseMs, segmentUnits, type AlignedUnit, type PausePriors } from './align.ts';
+import { countPauses, pauseMs, segmentUnits, VOICE_TAG_SCAN, type AlignedUnit, type PausePriors } from './align.ts';
+import { resolveVoiceTag } from './voice-tags.ts';
 
 export interface SubtitleCue {
   /** 展示文本([] 语气词已剥) */
@@ -46,8 +47,8 @@ export interface SubtitleCueOptions {
 
 /** 句末标点:必断 */
 const HARD_BREAK = /[。!?!?…;;\n]/u;
-/** 逗号族:长句的可断点 */
-const SOFT_BREAK = /[,,、::·]/u;
+/** 逗号族:长句的可断点(全角 ，： 也要认,否则超过 MAX_UNITS 的中文长句只能硬切在词中间) */
+const SOFT_BREAK = /[，,、：:·]/u;
 /** 一条 cue 的目标单元数上限;超过就找逗号断,连逗号都没有才硬切 */
 const MAX_UNITS = 22;
 /** 软断点生效的最小前缀单元数:开头两三个字就断出去反而碎 */
@@ -113,9 +114,13 @@ function chunkText(text: string): Chunk[] {
   };
   for (const atom of atoms) {
     const n = segmentUnits(atom.raw).length;
-    if (n > MAX_UNITS && !acc) {
-      // 整段没有可断标点:按单元数硬切
-      for (const piece of hardSplit(atom.raw)) emit(piece);
+    if (n > MAX_UNITS) {
+      // 整段没有可断标点:按单元数硬切。攒下的前缀并进第一刀——判据是"这一刀切多长",
+      // 不是"前面有没有东西";否则一条长原子会把前面攒的一起拖成一条远超上限的 cue
+      const pieces = hardSplit(atom.raw, acc);
+      acc = '';
+      accUnits = 0;
+      for (const piece of pieces) emit(piece);
       continue;
     }
     if (accUnits >= MIN_UNITS && accUnits + n > MAX_UNITS) emitAcc();
@@ -127,17 +132,39 @@ function chunkText(text: string): Chunk[] {
   return chunks;
 }
 
-/** 无标点长串:每 MAX_UNITS 个单元切一刀(按码点扫描,单元边界处下刀) */
-function hardSplit(raw: string): string[] {
-  const out: string[] = [];
+/**
+ * 下刀的粒度:一个 [] 语气词整体算一刀,其余按码点。语气词在单元表里是一整个单元,
+ * 切点落进它内部会把标签劈成 "[" 与 "laughing]" 两半,显示侧的剥除认不出来,观众就看到它了。
+ */
+function cutTokens(raw: string): string[] {
   const cps = [...raw];
-  let piece = '';
-  for (const ch of cps) {
-    piece += ch;
-    if (segmentUnits(piece).length >= MAX_UNITS) {
+  const out: string[] = [];
+  for (let i = 0; i < cps.length; i++) {
+    if (cps[i] === '[') {
+      const close = cps.indexOf(']', i + 1);
+      if (close > i && close - i <= VOICE_TAG_SCAN && resolveVoiceTag(cps.slice(i + 1, close).join(''))) {
+        out.push(cps.slice(i, close + 1).join(''));
+        i = close;
+        continue;
+      }
+    }
+    out.push(cps[i]);
+  }
+  return out;
+}
+
+/** 无标点长串:每 MAX_UNITS 个单元切一刀;carry 是已攒下的前缀,算进第一刀 */
+function hardSplit(raw: string, carry = ''): string[] {
+  const out: string[] = [];
+  let piece = carry;
+  for (const token of cutTokens(raw)) {
+    // 先判满再吃:满了还先追加一刀,这一片会顶过上限(前缀满 22 时实测 23/22/0,
+    // 末尾还甩出一条只有句号的 cue)
+    if (piece && segmentUnits(piece).length >= MAX_UNITS) {
       out.push(piece);
       piece = '';
     }
+    piece += token;
   }
   if (piece) out.push(piece);
   return out;

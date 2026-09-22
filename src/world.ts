@@ -58,6 +58,7 @@ import { AlignerClient, countPauses, segmentUnits, type AlignedUnit, type AlignR
 import {
   decodeWav,
   pcm16ToWav,
+  samplesToPcm16Wav,
   StreamingEnvelope,
   TtsClient,
   type TtsPiece,
@@ -293,7 +294,8 @@ export const TTS_PROFILE_DEFAULTS: TtsProfile = {
 };
 
 const TTS_PROFILE_LIMITS = {
-  seed: [0, 2 ** 31 - 1],
+  // 上界比 int32 最大少一格:静默重试要拿 seed+1 再发一次请求,+1 也必须落在区间内
+  seed: [0, 2 ** 31 - 2],
   cfgValue: [0.1, 10],
   inferenceTimesteps: [1, 100],
   maxSteps: [10, 2000],
@@ -1725,11 +1727,19 @@ export class VtuberWorld implements World {
   }
 
   /**
-   * 非流式单片合成，可同时生成对齐标注。仅连续超大静默触发一次重合成；两次仍含静默时选静默更短者播放并记录。
+   * 非流式单片合成，可同时生成对齐标注。仅连续超大静默触发一次重合成；重试换一个 seed 取另一条 take，
+   * 两次仍含静默时选静默更短者播放并记录。
    * 对齐判废本身不触发重合成：放弃该单元表，字幕和锚点使用估计，并记录降级。
    */
   private async synthAligned(text: string, signal?: AbortSignal): Promise<TtsPiece> {
-    let piece = await this.ttsClient.synth(text, undefined, signal);
+    /*
+     * 档案与重试 seed 一起取:两条 take 的差别只有 seed,且都取自同一刻的生效档案。
+     * 服务端认 seed(同一份档案发两遍拿回同一条 take,真机实测逐字节相同),所以「换采样」必须换它;
+     * 换的是请求里那份——生效档案含 seed 参与 speechProfileKey,动它等于每片样本一个新键。
+     */
+    const profile = this.synthProfileOf(this.ttsProfile);
+    const retrySeed = this.ttsProfile.seed + 1;
+    let piece = await this.ttsClient.synth(text, profile, signal);
     if (signal?.aborted) throw signal.reason;
     const first = piece.silence;
     if (first) {
@@ -1739,9 +1749,9 @@ export class VtuberWorld implements World {
           level: 'warn',
           tally: '静默重合成',
           event: 'resynth',
-          data: silenceData(first),
+          data: { ...silenceData(first), seed: profile.seed, retrySeed },
         });
-        const retry = await this.ttsClient.synth(text, undefined, signal);
+        const retry = await this.ttsClient.synth(text, { ...profile, seed: retrySeed }, signal);
         if (signal?.aborted) throw signal.reason;
         const second = retry.silence;
         // 取死气更短的那条:两条都不干净时不该盲信后来的
@@ -1752,7 +1762,7 @@ export class VtuberWorld implements World {
             level: 'warn',
             tally: '静默重合成',
             event: 'resynth-still-silent',
-            data: silenceData(second),
+            data: { ...silenceData(second), seed: retrySeed },
           });
         }
       } else if (first.longestMs >= first.minSilenceMs / 2) {
@@ -2551,13 +2561,7 @@ export class VtuberWorld implements World {
     if (p.refAudio) {
       const path = this.voicePath(p.refAudio);
       if (this.refAudioCache?.path !== path) {
-        try {
-          this.refAudioCache = path
-            ? { path, b64: readFileSync(path).toString('base64') }
-            : null;
-        } catch {
-          this.refAudioCache = null; // 文件没了:退回无参考音频
-        }
+        this.refAudioCache = path ? this.loadVoice(path) : null;
       }
       if (this.refAudioCache) {
         out.referenceAudioB64 = this.refAudioCache.b64;
@@ -2565,6 +2569,26 @@ export class VtuberWorld implements World {
       }
     }
     return out;
+  }
+
+  /**
+   * 声线文件 → 请求里那份 base64。服务端读 wav 只认老容器的 16bit(24bit 用 int16 指针读、
+   * EXTENSIBLE 直接拒收),所以凡是别的位深/容器都在这里规范化成单声道 PCM16;手工丢进 voices/
+   * 的文件也走这条,不指望导入那次校验。采样率沿用源文件,服务端自己重采样。
+   */
+  private loadVoice(path: string): { path: string; b64: string } | null {
+    let bytes: Uint8Array;
+    try {
+      bytes = readFileSync(path);
+    } catch {
+      return null; // 文件没了:退回无参考音频
+    }
+    const decoded = decodeWav(bytes);
+    const wav =
+      decoded.format === 1 && decoded.bitsPerSample === 16 && decoded.channels === 1 && !decoded.extensible
+        ? bytes
+        : samplesToPcm16Wav(decoded.samples, decoded.sampleRate);
+    return { path, b64: Buffer.from(wav).toString('base64') };
   }
 
   /**

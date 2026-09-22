@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decodeWav, extractEnvelope, pcm16ToWav, StreamingEnvelope, TtsClient } from '../../src/tts.ts';
-import { makeWav } from './helpers.ts';
+import { makeRawWav, makeWav } from './helpers.ts';
 
 describe('decodeWav / extractEnvelope', () => {
   it('解出采样与时长;响段包络高于静段', () => {
@@ -20,6 +20,31 @@ describe('decodeWav / extractEnvelope', () => {
 
   it('拒绝非 wav 数据', () => {
     expect(() => decodeWav(new Uint8Array(64))).toThrow();
+  });
+
+  it('24bit PCM:按 3 字节小端解,负数带符号位,幅度与 16bit 对齐', () => {
+    const values = [0, 0.5, -0.5, -1]; // -1 专门盯符号位
+    const data = new Uint8Array(values.length * 3);
+    const v = new DataView(data.buffer);
+    values.forEach((x, i) => {
+      const n = Math.round(x * 8388607);
+      v.setUint8(i * 3, n & 0xff);
+      v.setUint8(i * 3 + 1, (n >> 8) & 0xff);
+      v.setUint8(i * 3 + 2, (n >> 16) & 0xff);
+    });
+    const decoded = decodeWav(makeRawWav({ format: 1, bits: 24, fmtLen: 16, data }));
+    expect(decoded.sampleRate).toBe(16000);
+    expect(Array.from(decoded.samples).map((x) => Math.round(x * 1000))).toEqual([0, 500, -500, -1000]);
+  });
+
+  it('EXTENSIBLE 容器按 SubFormat 走:16bit 与普通 PCM16 解出同一份样本', () => {
+    const samples = [0, 0.25, -0.75];
+    const pcm = new Int16Array(samples.map((x) => Math.round(x * 32767)));
+    const data = new Uint8Array(pcm.buffer);
+    const plain = decodeWav(makeRawWav({ format: 1, bits: 16, fmtLen: 16, data }));
+    const ext = decodeWav(makeRawWav({ format: 0xfffe, bits: 16, fmtLen: 40, data }));
+    expect(ext.sampleRate).toBe(plain.sampleRate);
+    expect(Array.from(ext.samples)).toEqual(Array.from(plain.samples));
   });
 });
 

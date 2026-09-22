@@ -151,6 +151,143 @@ describe('TtsServerManager', () => {
     const second = mgr.start();
     expect(second.pid).toBe(first.pid);
   });
+
+  it('拉起失败(异步 error)后不留句柄:改好命令再点启动就能起来', async () => {
+    const port = await freePort();
+    const script = `require('node:http').createServer((req,res)=>{res.end('{"ok":true}')}).listen(${port},'127.0.0.1')`;
+    const override = { command: join(tmpdir(), 'no-such-llama-tts-server'), args: [] as string[] };
+    mgr = new TtsServerManager({
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+      port,
+      log: nullLogger(),
+      commandOverride: override,
+      healthIntervalMs: 50,
+      healthTimeoutMs: 5000,
+    });
+    mgr.start();
+    await waitFor(() => mgr!.state().phase === 'error');
+    expect(mgr.state().pid).toBeNull();
+    // 残留句柄会把这次重试挡在门外(以为"上一代还没退"),修好命令也该起得来
+    override.command = process.execPath;
+    override.args = ['-e', script];
+    expect(mgr.start().phase).toBe('starting');
+    await waitFor(() => mgr!.state().phase === 'running');
+  });
+
+  it('过期的那次"失败"回执不许杀新一代:超时判据只看当前这一代', async () => {
+    const port = await freePort();
+    let mode: 'slow-fail' | 'ok' = 'slow-fail';
+    const health = createServer((_req, res) => {
+      if (mode === 'ok') {
+        res.end('{"ok":true}');
+        return;
+      }
+      // 挂住 400ms 再以 503 收场:回执必然晚于超时阈值(120ms)到达
+      setTimeout(() => {
+        res.statusCode = 503;
+        res.end('{}');
+      }, 400);
+    });
+    await new Promise<void>((resolve) => health.listen(port, '127.0.0.1', () => resolve()));
+    try {
+      mgr = new TtsServerManager({
+        runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+        port,
+        log: nullLogger(),
+        commandOverride: { command: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] },
+        healthIntervalMs: 50,
+        healthTimeoutMs: 120,
+      });
+      mgr.start();
+      await new Promise((r) => setTimeout(r, 150)); // 这一次检查已在途,阈值也已过
+      await mgr.stop();
+      const restarted = mgr.start();
+      mode = 'ok';
+      await waitFor(() => mgr!.state().phase === 'running');
+      const pid = restarted.pid;
+      await new Promise((r) => setTimeout(r, 500)); // 等旧回执送到
+      expect(mgr.state().phase).toBe('running');
+      expect(mgr.state().pid).toBe(pid);
+    } finally {
+      await new Promise<void>((resolve) => health.close(() => resolve()));
+    }
+  });
+
+  it('检查在途时按停止:那次"活着"的回执不许把状态写回 running', async () => {
+    const port = await freePort();
+    // 同端口上另有一个应答者(不属于我们起的进程,所以"停止"杀不掉它):
+    // 用它复现"回执晚于停止"——没有世代号时这一下会把状态改回 running。
+    const health = createServer((_req, res) => {
+      setTimeout(() => res.end('{"ok":true}'), 400);
+    });
+    await new Promise<void>((resolve) => health.listen(port, '127.0.0.1', () => resolve()));
+    try {
+      mgr = new TtsServerManager({
+        runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+        port,
+        log: nullLogger(),
+        commandOverride: { command: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'] },
+        healthIntervalMs: 50,
+        healthTimeoutMs: 5000,
+      });
+      mgr.start();
+      await new Promise((r) => setTimeout(r, 120)); // 第一次检查已发出,回应还要 300ms 才到
+      const stopped = await mgr.stop();
+      expect(stopped.phase).toBe('stopped');
+      await new Promise((r) => setTimeout(r, 500)); // 等那次在途回执送到
+      expect(mgr.state().phase).toBe('stopped');
+    } finally {
+      await new Promise<void>((resolve) => health.close(() => resolve()));
+    }
+  });
+
+  it('加载超时:卡住的进程收到真死(SIGTERM 不理就强杀),期间句柄不丢、不放行 start', async () => {
+    const port = await freePort();
+    mgr = new TtsServerManager({
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+      port,
+      log: nullLogger(),
+      // 不监听端口、也不理 SIGTERM 的假 server:健康检查永远不通
+      commandOverride: { command: process.execPath, args: ['-e', "process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)"] },
+      healthIntervalMs: 50,
+      healthTimeoutMs: 150,
+    });
+    const pid = mgr.start().pid;
+    expect(pid).not.toBeNull();
+    await waitFor(() => mgr!.state().phase === 'error');
+    expect(mgr.state().detail).toContain('超时');
+    // Windows 上 kill() 就是 TerminateProcess,子进程的 SIGTERM 处理器不生效,进程当场就退:
+    // 没有宽限期可测,只剩下面"最终收到真死"那条
+    if (process.platform !== 'win32') {
+      // 宽限期里进程还在:句柄留着(pid 报得出来,停止按钮还停得到),start 不许再拉一个
+      expect(mgr.state().pid).toBe(pid);
+      expect(mgr.start().pid).toBe(pid);
+    }
+    // 3 秒宽限到点强杀,pid 归 null
+    await waitFor(() => mgr!.state().pid === null, 8000);
+  });
+
+  it('停完立刻启动:不起第二个进程,等停完再启动才真的拉新的', async () => {
+    const port = await freePort();
+    const script = `require('node:http').createServer((req,res)=>{res.end('{"ok":true}')}).listen(${port},'127.0.0.1')`;
+    mgr = new TtsServerManager({
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+      port,
+      log: nullLogger(),
+      commandOverride: { command: process.execPath, args: ['-e', script] },
+      healthIntervalMs: 50,
+    });
+    const firstPid = mgr.start().pid;
+    const stopping = mgr.stop(); // 不 await:模拟用户在停止过程中又点了启动
+    const blocked = mgr.start();
+    expect(blocked.phase).toBe('stopping');
+    expect(blocked.pid).toBe(firstPid);
+    await stopping;
+    expect(mgr.state().phase).toBe('stopped');
+    const again = mgr.start();
+    expect(again.phase).toBe('starting');
+    expect(again.pid).not.toBe(firstPid);
+  });
 });
 
 describe('TtsServerManager 启动参数', () => {

@@ -31,6 +31,48 @@ export function makeWav(samples: number[], sampleRate = 16000): Uint8Array {
   return new Uint8Array(buf);
 }
 
+/** 指定容器与位深的 wav 夹具:24bit 与 EXTENSIBLE 是服务端读不了的那两种形状 */
+export function makeRawWav(opts: {
+  format: number;
+  bits: number;
+  fmtLen: number;
+  data: Uint8Array;
+  channels?: number;
+  sampleRate?: number;
+}): Uint8Array {
+  const { format, bits, fmtLen, data } = opts;
+  const channels = opts.channels ?? 1;
+  const sr = opts.sampleRate ?? 16000;
+  const buf = new ArrayBuffer(20 + fmtLen + 8 + data.length);
+  const v = new DataView(buf);
+  const str = (at: number, s: string): void => {
+    for (let i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i));
+  };
+  str(0, 'RIFF');
+  v.setUint32(4, buf.byteLength - 8, true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  v.setUint32(16, fmtLen, true);
+  v.setUint16(20, format, true);
+  v.setUint16(22, channels, true);
+  v.setUint32(24, sr, true);
+  v.setUint32(28, (sr * channels * bits) / 8, true);
+  v.setUint16(32, (channels * bits) / 8, true);
+  v.setUint16(34, bits, true);
+  if (fmtLen >= 40) {
+    // EXTENSIBLE:cbSize + validBits + channelMask + SubFormat GUID(头两字节是真正的格式 tag)
+    v.setUint16(36, 22, true);
+    v.setUint16(38, bits, true);
+    v.setUint32(40, 0, true);
+    v.setUint16(44, format === 0xfffe ? 1 : format, true);
+  }
+  const dataAt = 20 + fmtLen;
+  str(dataAt, 'data');
+  v.setUint32(dataAt + 4, data.length, true);
+  new Uint8Array(buf).set(data, dataAt + 8);
+  return new Uint8Array(buf);
+}
+
 /** 转码测试的素材:用 ffmpeg 自己把 wav 压成 mp3/m4a 之类 */
 export function encodeAudio(
   ffmpeg: string,
