@@ -1,16 +1,12 @@
 /**
  * 标准 OpenAI Speech 适配器:一个端点 `/audio/speech`,二进制音频响应。
  *
- * 请求体只有 input / model / voice / response_format,加上用户显式配置的
- * speed、instructions 与扩展参数。不默认发送 seed、cfg_value、
- * inference_timesteps、max_steps、temperature、reference_audio、prompt_text,
- * 也不发 `stream: true`;厂商扩展走 extraBody。
+ * 请求字段由 buildSpeechBody 构造,厂商扩展经 extraBody 显式配置。
  *
- * 低延迟靠读同一个端点的响应体,不追加 `/stream`;`delivery: buffered` 表示客户端
- * 收齐再解码,不是向服务端附加一个未经定义的字段。SSE 音频事件 P0 不实现,
- * 遇到 `text/event-stream` 明确报错而不是把文本当音频。
+ * 增量模式读取同一个端点的响应体;buffered 模式收齐再解码。
+ * 当前只消费二进制响应,收到 SSE 时明确报错。
  */
-import { decodeAudioBytes, decodeWav, decodedToWav, extractEnvelope, type DecodedWav } from './audio.ts';
+import { decodeAudioBytes, decodeWav, decodedToWav, extractEnvelope, type PcmAudio } from './audio.ts';
 import { findFfmpeg, transcodeAudioToWav } from '../audio-convert.ts';
 import { TTS_TRANSCODE_BUDGET_MS } from './config.ts';
 import { scanSilence } from '../silence-scan.ts';
@@ -65,7 +61,7 @@ const COMPRESSED_EXT: Record<string, string> = { mp3: 'mp3', opus: 'opus', aac: 
  * 响应字节 → 内部样本。WAV/PCM 本地解;压缩格式收齐后交本机 ffmpeg 转成 wav,
  * 缺 ffmpeg 就报格式依赖,而不是把压缩字节当 PCM 硬啃。保留源采样率。
  */
-async function decodeResponse(bytes: Uint8Array, service: string, snapshot: TtsExecutionSnapshot, signal: AbortSignal): Promise<DecodedWav> {
+async function decodeResponse(bytes: Uint8Array, service: string, snapshot: TtsExecutionSnapshot, signal: AbortSignal): Promise<PcmAudio> {
   const format = snapshot.responseFormat;
   if (format === 'wav' || format === 'pcm') {
     return decodeAudioBytes(bytes, { responseFormat: format, ...(snapshot.pcm ? { pcm: snapshot.pcm } : {}) });
@@ -120,7 +116,7 @@ export class OpenAiSpeechAdapter implements TtsAdapter {
       throw await httpErrorOf(this.snapshot.name, '合成响应', res);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
-    let decoded: DecodedWav;
+    let decoded: PcmAudio;
     try {
       decoded = await decodeResponse(bytes, this.snapshot.name, this.snapshot, linked);
     } catch (err) {
@@ -128,6 +124,7 @@ export class OpenAiSpeechAdapter implements TtsAdapter {
     }
     return {
       text,
+      qualityPolicy: 'generic',
       wav: decodedToWav(decoded),
       durationMs: decoded.durationMs,
       envelope: extractEnvelope(decoded),
@@ -155,8 +152,7 @@ export class OpenAiSpeechAdapter implements TtsAdapter {
       ...(this.snapshot.pcm ? { pcm: this.snapshot.pcm } : {}),
       sink,
       signal,
-      ...(opts.maxDurationMs !== undefined ? { maxDurationMs: opts.maxDurationMs } : {}),
     });
-    return pieceFromStream(text, result);
+    return { ...pieceFromStream(text, result), qualityPolicy: 'generic' };
   }
 }

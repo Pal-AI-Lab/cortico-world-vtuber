@@ -231,7 +231,7 @@ export const ttsPanel: ConsolePanel = {
     let inAuthType: 'none' | 'bearer' = 'none';
     let clearKeyRequested = false;
     let local: TtsPanelState['local'] = null;
-    /** World 当作内置 legacy 条目的那一条;声线档案与本地运行时路径只归它 */
+    /** World 当前提供声线编辑的 legacy 服务。 */
     let builtinServiceId = '';
     let testWav: TestWav | null = null;
     /** 声线库:取数时表单可能还没铺出来,先记着,铺的时候再填下拉 */
@@ -390,11 +390,7 @@ export const ttsPanel: ConsolePanel = {
     function renderVisibility(): void {
       const isLegacy = selProtocol.value === 'voxcpm-legacy';
       const isManaged = isLegacy && selManagement.value === 'managed-voxcpm';
-      /*
-       * 声线档案与本地运行时路径只从内置 legacy 条目读,而声线档案在演出引擎里
-       * 又只认**当前服务**。两样都不成立时摆出这些控件,编辑就会落到另一条身上
-       * (或者被服务端拒掉),所以按"这条就是内置条目"来定显隐,并说明差在哪一步。
-       */
+      // 声线控件只编辑引擎当前提供的 legacy 档案,运行时控件还要求该服务由本地管理。
       const builtin = builtinServiceId !== '' && selectedId === builtinServiceId;
       const current = selectedId !== '' && selectedId === activeServiceId;
       legacyBox.hidden = !(builtin && current);

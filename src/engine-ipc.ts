@@ -99,8 +99,9 @@ export type EnginePanel =
   | 'overlay'
   | 'model';
 
-/** init 的回执:演出流的实际地址(偏好端口被占会顺延) */
+/** init 的回执:已应用的 TTS 配置与演出流实际地址。 */
 export interface EngineReady {
+  tts: TtsApplyReceipt;
   streamUrl: string;
   danmakuUrl: string;
   overlayUrl: string;

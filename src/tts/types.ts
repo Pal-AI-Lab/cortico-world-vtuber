@@ -29,10 +29,11 @@ export interface TtsPiece {
   units?: AlignedUnit[];
   /** 流式合成被中途掐断(撞时长宽容界,或撞超大静默段):已收部分照常可用 */
   truncated?: boolean;
-  /**
-   * 这一片音频里最长的连续近静默段(见 silence-scan.ts)。`triggered` 为真即
-   * 「错误生产」的签名成立——破坏性动作只认它,而且只对 VoxCPM 质量策略成立。
-   */
+  /** 合成开始时的服务策略;后续服务切换不改变本片的处理方式。 */
+  qualityPolicy?: 'voxcpm' | 'generic';
+  /** 本片所用后端的音频时长上限。 */
+  maxAudioMs?: number;
+  /** 本片最长的连续近静默段;只有 VoxCPM 策略使用 triggered 决定截流。 */
   silence?: SilenceReport;
   /**
    * 流式对齐判废时不采信 units,附带原因和 lastGoodEndMs。判废本身不触发破坏性
@@ -41,10 +42,13 @@ export interface TtsPiece {
   alignBad?: { reasons: string[]; lastGoodEndMs: number | null };
 }
 
+/** 使用本片合成快照,对已收到的 PCM16 前缀生成单元时间点。 */
+export type TtsPcmAligner = (pcm: Uint8Array, sampleRate: number, units: string[]) => Promise<AlignedUnit[] | null>;
+
 /** 流式合成的接收端 */
 export interface TtsStreamSink {
   /** 头解析完成,采样率已知;envelope 是增量包络,lipsync/重音扫描边播边读 */
-  begin?(info: { sampleRate: number; envelope: StreamingEnvelope }): void;
+  begin?(info: { sampleRate: number; envelope: StreamingEnvelope; alignPcm?: TtsPcmAligner }): void;
   /** 一块 PCM16LE 单声道字节(偶数长度),到达即转发舞台页 */
   pcm(chunk: Uint8Array): void;
 }

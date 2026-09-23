@@ -38,6 +38,8 @@ export interface ConsumeStreamOptions {
   signal: AbortSignal;
   /** 跑飞止损预算;超出即掐流保留已收部分 */
   maxDurationMs?: number;
+  /** VoxCPM 的长静默截流策略,由适配器显式启用。 */
+  stopOnSilence?: boolean;
   /** 收流开始时通知采样率(面板/编排器要在线路之外也知道) */
   onSampleRate?: (sampleRate: number) => void;
 }
@@ -251,7 +253,7 @@ export async function consumeAudioStream(
         emit(toMonoInt16(buf, channels));
       }
       // 掐流判据一:超大静默段(说得清掐在哪)
-      const sil = live.silence?.check();
+      const sil = opts.stopOnSilence ? live.silence?.check() : null;
       if (sil) {
         truncated = true;
         await reader.cancel().catch(() => {});

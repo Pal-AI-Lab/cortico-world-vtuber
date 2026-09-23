@@ -7,7 +7,7 @@ import type { EventEnvelope, Logger, PushOptions, WorldHost } from 'cortico/core
 import { VtuberWorldProxy } from '../../src/proxy.ts';
 import { makeWav, recordingLogger, type LogLine } from './helpers.ts';
 import type { TtsRegistryConfig } from '../../src/tts/config.ts';
-import type { TtsServicesState } from '../../src/world.ts';
+import type { TtsMountState, TtsServicesState } from '../../src/world.ts';
 
 /**
  * 服务表经**真实子进程**接线:R8 要的是"配置真的到了执行 TTS 的那个进程",
@@ -127,6 +127,17 @@ describe('TTS 服务表经真实子进程', () => {
     expect(state.pendingApply).toBe(false);
   });
 
+  it('挂载页停止回执包含当前服务、应用版本与本地资源', async () => {
+    const state = await proxy.console().invoke!('mount', 'ttsStop', []) as TtsMountState;
+    expect(state.serviceId).toBe('legacy-default');
+    expect(state.appliedRevision).toBe(0);
+    expect(state.pendingApply).toBe(false);
+    expect(state.managed).toBe(true);
+    expect(state.phase).toBe('stopped');
+    expect(state.local?.resources.server).toBeDefined();
+    expect(state.local?.resources.alignerLm).toBeDefined();
+  });
+
   it('保存并激活一条通用服务:子进程回执确认应用,revision 对齐', async () => {
     const res = await proxy.ttsConsole().saveService({
       service: {
@@ -186,6 +197,24 @@ describe('TTS 服务表经真实子进程', () => {
     expect(hits).toContain('/v1/audio/speech');
     expect(JSON.stringify(registry)).toBe(before);
   });
+
+  it('启动期间的新配置保持待应用;引擎退出后清除生效回执', async () => {
+    await proxy.stop();
+    const previous = registry.revision;
+    const starting = proxy.start(host);
+    registry = { ...registry, revision: previous + 1 };
+    await starting;
+    const state = await proxy.ttsConsole().services();
+    expect(state.savedRevision).toBe(previous + 1);
+    expect(state.appliedRevision).toBe(previous);
+    expect(state.pendingApply).toBe(true);
+    await proxy.stop();
+    const stopped = await proxy.ttsConsole().services();
+    expect(stopped.appliedRevision).toBe(-1);
+    expect(stopped.appliedServiceId).toBe('');
+    expect(stopped.pendingApply).toBe(true);
+    await proxy.start(host);
+  }, TIMEOUT);
 
   it('指向不存在的地址时报错可诊断,不谎报成功', async () => {
     const out = await proxy.ttsConsole().testService({

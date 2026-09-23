@@ -182,7 +182,7 @@ export const TTS_TIMEOUT_DEFAULT_MS = 60_000;
 export const TTS_TRANSCODE_BUDGET_MS = 30_000;
 const SPEED_LIMITS = [0.25, 4] as const;
 const PCM_SAMPLE_RATE_LIMITS = [8_000, 192_000] as const;
-const INSTRUCTIONS_MAX = 1_000;
+const INSTRUCTIONS_MAX = 4_096;
 
 function clampNum(v: unknown, [lo, hi]: readonly [number, number], fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

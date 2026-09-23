@@ -788,16 +788,11 @@ export interface TtsPanelState {
   local: (TtsServerState & { reachable: boolean }) | null;
   /** 当前服务是否由 World 管理本地进程 */
   managed: boolean;
-  /** 当前服务是否是内置 legacy 条目(声线与本地运行时区域只对它展示) */
+  /** 当前服务是否使用 legacy 协议 */
   legacy: boolean;
-  /**
-   * World 实际当作内置 legacy 条目的那一条服务 id;没有 legacy 条目时是空串。
-   *
-   * 声线档案与本地运行时路径只从这一条读(见 `legacyService()`),所以面板必须按
-   * 它判定——按"协议是 voxcpm-legacy"判定会把编辑落到另一条身上。
-   */
+  /** 声线编辑器对应的 legacy 服务 id;优先取当前服务,没有 legacy 服务时为空。 */
   builtinServiceId: string;
-  /** 内置 legacy 条目的声线档案 */
+  /** 声线编辑器对应的服务档案 */
   profile: TtsProfile;
   voices: TtsVoiceInfo[];
   voicesDir: string;
@@ -827,13 +822,7 @@ export interface TtsMountState {
   /** 由 World 管理本地进程时为真 */
   managed: boolean;
   /** managed 服务的进程状态;external 服务为 null */
-  local: {
-    phase: string;
-    pid: number | null;
-    detail: string | null;
-    url: string;
-    reachable: boolean;
-  } | null;
+  local: (TtsServerState & { reachable: boolean }) | null;
   phase: string;
   pid: number | null;
   detail: string | null;
@@ -1366,13 +1355,6 @@ export class VtuberWorld implements World {
   private readonly modelStore: ModelStore;
   /** 本平台的发布计划;null = 没有现成构建,只能自备目录 */
   private readonly releasePlan: ReleasePlan | null;
-  private readonly ttsRuntimeDirOpt?: () => string;
-  private readonly ttsRuntimeReleaseOpt?: () => string;
-  private readonly ttsBaseLmFileOpt?: () => string;
-  private readonly ttsAcousticFileOpt?: () => string;
-  private readonly ttsAlignerLmFileOpt?: () => string;
-  private readonly ttsAlignerAudioFileOpt?: () => string;
-  private readonly ttsVoicesDirOpt?: () => string;
   private readonly live2dDirOpt?: () => string;
   /** 内置 legacy 条目的声线档案;非 legacy 服务下仍保留,是那条目的投影 */
   private ttsProfile: TtsProfile;
@@ -1486,13 +1468,6 @@ export class VtuberWorld implements World {
     this.delayedSourcesOpt = opts.delayedSources;
     this.yieldWindowMsOpt = opts.yieldWindowMs;
     this.yieldFadeMsOpt = opts.yieldFadeMs;
-    this.ttsRuntimeDirOpt = opts.ttsRuntimeDir;
-    this.ttsRuntimeReleaseOpt = opts.ttsRuntimeRelease;
-    this.ttsBaseLmFileOpt = opts.ttsBaseLmFile;
-    this.ttsAcousticFileOpt = opts.ttsAcousticFile;
-    this.ttsAlignerLmFileOpt = opts.ttsAlignerLmFile;
-    this.ttsAlignerAudioFileOpt = opts.ttsAlignerAudioFile;
-    this.ttsVoicesDirOpt = opts.ttsVoicesDir;
     this.live2dDirOpt = opts.live2dDir;
     this.releasePlan = planFor(this.runtimeRelease(), defaultBackend());
     this.runtimeStore = new RuntimeStore(runtimesRoot(), this.log);
@@ -1788,15 +1763,16 @@ export class VtuberWorld implements World {
   }
 
   /**
-   * TTS 那盏灯只认当前服务的结论。
+   * 合成与对齐状态只记录当前配置的请求结果。
    *
    * 切换之后旧服务在途的那一片可能才失败:那是旧服务的账,记到新服务头上就会
-   * 出现"刚换过去就报异常"。所以结论按服务 id 归属,只有仍指向当前服务的才落灯。
+   * 出现"刚换过去就报异常"。状态按配置指纹归属,只有与当前配置一致的结果才更新。
    */
-  private noteTtsOutcome(snapshot: TtsExecutionSnapshot, ok: boolean): void {
+  private noteServiceOutcome(snapshot: TtsExecutionSnapshot, ok: boolean, kind: 'tts' | 'align' = 'tts'): void {
     const active = this.activeSnapshotOrNull();
-    if (!active || active.serviceId !== snapshot.serviceId) return;
-    this.ttsOk = ok;
+    if (!active || active.fingerprint !== snapshot.fingerprint) return;
+    if (kind === 'tts') this.ttsOk = ok;
+    else this.alignOk = ok;
   }
 
   /** 当前服务的冻结快照;整片合成(含允许的回退)共用同一份。 */
@@ -1830,6 +1806,8 @@ export class VtuberWorld implements World {
   applyTtsRegistry(read: TtsRegistryRead): { appliedRevision: number; activeServiceId: string } {
     const previousProfile = JSON.stringify(this.ttsProfile);
     this.ttsRegistryState = read;
+    this.ttsOk = null;
+    this.alignOk = null;
     // 应用过来的那份是权威:本进程之前改过的声线覆盖作废
     this.legacyProfilePatch = null;
     this.ttsResolver.invalidate();
@@ -1893,35 +1871,41 @@ export class VtuberWorld implements World {
   private legacyService(): TtsServiceConfig | null {
     const read = this.ttsResolver.read();
     if (!read.ok) return null;
-    return read.registry.services.find((s) => s.legacy) ?? null;
+    const active = read.registry.services.find((s) => s.id === read.registry.activeServiceId);
+    return active?.legacy ? active : read.registry.services.find((s) => s.legacy) ?? null;
   }
 
-  /** 内置 legacy 条目的服务根;本地管理器与对齐器都挂在它上面。 */
+  private managedService(): TtsServiceConfig | null {
+    const read = this.ttsResolver.read();
+    if (!read.ok) return null;
+    return read.registry.services.find((s) => s.management === 'managed-voxcpm') ?? null;
+  }
+
+  /** 托管服务的根地址,供本地进程管理器使用。 */
   private legacyServiceRoot(): string {
-    const service = this.legacyService();
+    const service = this.managedService();
     return service ? serviceRootFromApiPrefix(service.baseUrl) : this.ttsUrlFallback;
   }
 
   /**
-   * 本地运行时路径。注册表里的值是权威(控制台「声线档案」页写它),构造选项
-   * 只是没有注册表时的兜底。
+   * 本地运行时路径由注册表提供。空值表示使用部署默认目录。
    */
   private legacyRuntime(): TtsLegacyRuntimeConfig {
-    const fromRegistry = this.legacyService()?.legacy?.runtime;
+    const fromRegistry = (this.managedService() ?? this.legacyService())?.legacy?.runtime;
     return {
-      runtimeDir: fromRegistry?.runtimeDir || (this.ttsRuntimeDirOpt?.() ?? ''),
-      runtimeRelease: fromRegistry?.runtimeRelease || (this.ttsRuntimeReleaseOpt?.() ?? ''),
-      baseLmFile: fromRegistry?.baseLmFile || (this.ttsBaseLmFileOpt?.() ?? ''),
-      acousticFile: fromRegistry?.acousticFile || (this.ttsAcousticFileOpt?.() ?? ''),
-      alignerLmFile: fromRegistry?.alignerLmFile || (this.ttsAlignerLmFileOpt?.() ?? ''),
-      alignerAudioFile: fromRegistry?.alignerAudioFile || (this.ttsAlignerAudioFileOpt?.() ?? ''),
-      voicesDir: fromRegistry?.voicesDir || (this.ttsVoicesDirOpt?.() ?? ''),
+      runtimeDir: fromRegistry?.runtimeDir ?? '',
+      runtimeRelease: fromRegistry?.runtimeRelease ?? '',
+      baseLmFile: fromRegistry?.baseLmFile ?? '',
+      acousticFile: fromRegistry?.acousticFile ?? '',
+      alignerLmFile: fromRegistry?.alignerLmFile ?? '',
+      alignerAudioFile: fromRegistry?.alignerAudioFile ?? '',
+      voicesDir: fromRegistry?.voicesDir ?? '',
     };
   }
 
   /** 参考音频是部署私有资产,注册表里只有文件名;base64 现读声线库缓存。 */
   private legacySynthProfile(service: TtsServiceConfig): TtsSynthProfile {
-    const profile = service.legacy?.profile ?? this.ttsProfile;
+    const profile = clampTtsProfile({}, service.legacy!.profile);
     const out: TtsSynthProfile = {
       seed: profile.seed,
       cfgValue: profile.cfgValue,
@@ -1930,7 +1914,8 @@ export class VtuberWorld implements World {
       temperature: profile.temperature,
     };
     if (profile.refText) out.refText = profile.refText;
-    const b64 = this.refAudioB64(profile.refAudio);
+    const voicesDir = service.legacy!.runtime.voicesDir.trim() || join(TTS_MODELS_DIR, 'voices');
+    const b64 = this.refAudioB64(profile.refAudio, voicesDir);
     if (b64) out.referenceAudioB64 = b64;
     return out;
   }
@@ -1956,9 +1941,9 @@ export class VtuberWorld implements World {
     let piece: TtsPiece;
     try {
       piece = await adapter.synth(text, signal);
-      this.noteTtsOutcome(snapshot, true);
+      this.noteServiceOutcome(snapshot, true);
     } catch (err) {
-      this.noteTtsOutcome(snapshot, false);
+      this.noteServiceOutcome(snapshot, false);
       throw err;
     }
     if (signal?.aborted) throw signal.reason;
@@ -2050,6 +2035,15 @@ export class VtuberWorld implements World {
     const snapshot = this.ttsSnapshot();
     const adapter = this.ttsResolver.adapterFor(snapshot);
     if (!adapter.synthStream) throw new Error(`服务「${snapshot.name}」不支持增量合成`);
+    const align = this.alignReady(snapshot);
+    const snapshotSink: TtsStreamSink = {
+      pcm: chunk => sink.pcm(chunk),
+      begin: info => sink.begin?.({
+        ...info,
+        ...(align ? { alignPcm: (pcm: Uint8Array, sampleRate: number, units: string[]) =>
+          this.alignPcmPrefix(pcm, sampleRate, units, snapshot) } : {}),
+      }),
+    };
     let piece: TtsPiece;
     try {
       /*
@@ -2057,17 +2051,17 @@ export class VtuberWorld implements World {
        * 两个条件同时成立时才发生一次,整片复用同一个快照。已经出过声就不整句
        * 重发——那会重复播放前缀,还可能多收一次费。
        */
-      piece = await adapter.synthStream(text, sink, {
+      piece = await adapter.synthStream(text, snapshotSink, {
         signal,
         ...(maxDurationMs !== undefined ? { maxDurationMs } : {}),
         fallback: true,
       });
-      this.noteTtsOutcome(snapshot, true);
+      this.noteServiceOutcome(snapshot, true);
     } catch (err) {
-      this.noteTtsOutcome(snapshot, false);
+      this.noteServiceOutcome(snapshot, false);
       throw err;
     }
-    if (!this.alignReady(snapshot)) return piece;
+    if (!align) return piece;
     const alignRes = await this.alignPiece(piece, text, snapshot);
     if (!alignRes) return piece;
     // 不过门的单元表一格也不留:音频已经播出去了拦不住,但 units 是字幕与锚点时间轴的
@@ -2106,7 +2100,7 @@ export class VtuberWorld implements World {
     const t0 = Date.now();
     try {
       const res = await aligner.align(pcm16ToWav([pcm], sampleRate), '', units);
-      this.alignOk = true;
+      this.noteServiceOutcome(snapshot, true, 'align');
       this.tracePerf('对齐', `前缀对齐 ${units.length} 单元`, {
         durMs: Date.now() - t0,
         event: 'prefix-align',
@@ -2114,7 +2108,7 @@ export class VtuberWorld implements World {
       });
       return res.units;
     } catch (err) {
-      this.alignOk = false;
+      this.noteServiceOutcome(snapshot, false, 'align');
       this.tracePerf('对齐', '前缀对齐失败', { detail: String(err).slice(0, 80), event: 'prefix-align-failed' });
       return null;
     }
@@ -2173,7 +2167,7 @@ export class VtuberWorld implements World {
     const t0 = Date.now();
     try {
       const result = await aligner.align(piece.wav, text);
-      this.alignOk = true;
+      this.noteServiceOutcome(snapshot, true, 'align');
       this.tracePerf('对齐', `${result.units.length} 个单元`, {
         durMs: Date.now() - t0,
         event: 'align',
@@ -2181,7 +2175,7 @@ export class VtuberWorld implements World {
       });
       return result;
     } catch (err) {
-      this.alignOk = false;
+      this.noteServiceOutcome(snapshot, false, 'align');
       this.tracePerf('对齐', '对齐失败', { detail: String(err).slice(0, 80), event: 'align-failed' });
       return null;
     }
@@ -2688,9 +2682,9 @@ export class VtuberWorld implements World {
         let piece;
         try {
           piece = await this.ttsResolver.adapterFor(snapshot).synth(line);
-          this.noteTtsOutcome(snapshot, true);
+          this.noteServiceOutcome(snapshot, true);
         } catch (err) {
-          this.noteTtsOutcome(snapshot, false);
+          this.noteServiceOutcome(snapshot, false);
           return { message: `合成失败: ${err instanceof Error ? err.message : String(err)}`, wav: null };
         }
         const synthMs = Date.now() - t0;
@@ -2730,8 +2724,8 @@ export class VtuberWorld implements World {
 
   /** 用一份临时声线档案构造 legacy 快照;面板试听不动生效档案。 */
   private snapshotForLegacyProfile(profile: TtsProfile): TtsExecutionSnapshot {
-    const service = this.legacyService();
-    if (!service) throw new Error('没有内置 legacy 服务,无法按声线档案试听');
+    const service = this.activeServiceConfig();
+    if (!service?.legacy) throw new Error('当前服务没有 legacy 声线档案');
     return this.ttsResolver.snapshotFor({ ...service, legacy: { ...service.legacy!, profile } }, -1);
   }
 
@@ -2795,14 +2789,14 @@ export class VtuberWorld implements World {
 
   /** 参考音频是部署私有资产,不是模型;留空就放在权重目录旁边 */
   private voicesDir(): string {
-    return this.legacyRuntime().voicesDir.trim() || join(TTS_MODELS_DIR, 'voices');
+    return this.legacyService()?.legacy?.runtime.voicesDir.trim() || join(TTS_MODELS_DIR, 'voices');
   }
 
   /** 裸文件名 → voices/ 下的绝对路径;带路径分隔符的一律拒绝 */
-  private voicePath(file: string): string | null {
+  private voicePath(file: string, dir = this.voicesDir()): string | null {
     const name = file.trim();
     if (!name || /[\\/]/.test(name)) return null;
-    return join(this.voicesDir(), name);
+    return join(dir, name);
   }
 
   /**
@@ -2868,8 +2862,8 @@ export class VtuberWorld implements World {
   }
 
   /** 参考音频按路径缓存;导入同名文件时清除缓存。 */
-  private refAudioB64(refAudio: string | null): string | null {
-    const path = refAudio ? this.voicePath(refAudio) : null;
+  private refAudioB64(refAudio: string | null, voicesDir: string): string | null {
+    const path = refAudio ? this.voicePath(refAudio, voicesDir) : null;
     if (!path) return null;
     if (this.refAudioCache?.path !== path) this.refAudioCache = this.loadVoice(path);
     return this.refAudioCache?.b64 ?? null;
@@ -2880,13 +2874,8 @@ export class VtuberWorld implements World {
    * EXTENSIBLE 直接拒收),所以凡是别的位深/容器都在这里规范化成单声道 PCM16;手工丢进 voices/
    * 的文件也走这条,不指望导入那次校验。采样率沿用源文件,服务端自己重采样。
    */
-  private loadVoice(path: string): { path: string; b64: string } | null {
-    let bytes: Uint8Array;
-    try {
-      bytes = readFileSync(path);
-    } catch {
-      return null; // 文件没了:退回无参考音频
-    }
+  private loadVoice(path: string): { path: string; b64: string } {
+    const bytes = readFileSync(path);
     const decoded = decodeWav(bytes);
     const wav =
       decoded.format === 1 && decoded.bitsPerSample === 16 && decoded.channels === 1 && !decoded.extensible
@@ -2937,14 +2926,6 @@ export class VtuberWorld implements World {
           if (!result.truncated) this.noteSpeechRate(text, result.durationMs, profileKey);
           return result;
         },
-        alignPcm: (pcm, sampleRate, units) => {
-          const snapshot = this.activeSnapshotOrNull();
-          return snapshot ? this.alignPcmPrefix(pcm, sampleRate, units, snapshot) : Promise.resolve(null);
-        },
-        // 后端硬时长上限只属于 VoxCPM server;通用服务不给,末级兜底因此不启用
-        ...(this.activeSnapshotOrNull()?.capabilities.maxAudioMs !== undefined
-          ? { maxAudioMs: () => this.activeSnapshotOrNull()?.capabilities.maxAudioMs }
-          : {}),
       },
       streamEnabled: () =>
         (this.streamEnabledOpt?.() ?? VTUBER_DEFAULTS.streamEnabled) && this.streamCapable(),

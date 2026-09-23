@@ -219,7 +219,16 @@ async function handleInit(init: EngineInit): Promise<EngineReady> {
   };
   statusTimer = setInterval(pushStatus, 300);
   statusTimer.unref?.();
-  return { streamUrl: m.streamUrl, danmakuUrl: m.danmakuUrl, overlayUrl: m.overlayUrl };
+  const applied = m.ttsRegistryRead();
+  return {
+    streamUrl: m.streamUrl,
+    danmakuUrl: m.danmakuUrl,
+    overlayUrl: m.overlayUrl,
+    tts: {
+      appliedRevision: applied.ok ? applied.registry.revision : -1,
+      activeServiceId: applied.ok ? applied.registry.activeServiceId : '',
+    },
+  };
 }
 
 /** 状态行与徽标推给主进程缓存(心跳与控制台读缓存,不跨进程拉) */

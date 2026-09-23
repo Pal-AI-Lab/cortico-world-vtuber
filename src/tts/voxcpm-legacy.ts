@@ -90,6 +90,8 @@ export class VoxcpmLegacyAdapter implements TtsAdapter {
     }
     return {
       text,
+      qualityPolicy: 'voxcpm',
+      maxAudioMs: this.snapshot.capabilities.maxAudioMs,
       wav: decodedToWav(decoded),
       durationMs: decoded.durationMs,
       envelope: extractEnvelope(decoded),
@@ -128,9 +130,14 @@ export class VoxcpmLegacyAdapter implements TtsAdapter {
         format: 'wav',
         sink: watched,
         signal,
+        stopOnSilence: true,
         ...(opts.maxDurationMs !== undefined ? { maxDurationMs: opts.maxDurationMs } : {}),
       });
-      return pieceFromStream(text, result);
+      return {
+        ...pieceFromStream(text, result),
+        qualityPolicy: 'voxcpm',
+        maxAudioMs: this.snapshot.capabilities.maxAudioMs,
+      };
     } catch (err) {
       if (signal.aborted) throw err;
       if (!opts.fallback || delivered || !isMissingRoute(err)) throw err;

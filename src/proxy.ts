@@ -561,9 +561,9 @@ export class VtuberWorldProxy implements World {
       case 'ttsState':
         return this.mountTtsState();
       case 'ttsStart':
-        return this.panelCall('tts', 'start');
-      default:
-        return this.panelCall('tts', 'stop');
+      case 'ttsStop':
+        await this.panelCall('tts', method === 'ttsStart' ? 'start' : 'stop');
+        return this.mountTtsState();
     }
   }
 
@@ -585,7 +585,7 @@ export class VtuberWorldProxy implements World {
       appliedRevision: services.appliedRevision,
       pendingApply: services.pendingApply,
       managed: panel.managed,
-      local: local ? { phase: local.phase, pid: local.pid, detail: local.detail, url: local.url, reachable: local.reachable } : null,
+      local,
       phase: local?.phase ?? 'external',
       pid: local?.pid ?? null,
       detail: local?.detail ?? null,
@@ -883,16 +883,16 @@ export class VtuberWorldProxy implements World {
     const ready = (await this.rpc({ kind: 'init', init: this.buildInit() }, 30_000)) as EngineReady;
     this.urls = ready;
     this.ready = true;
-    // init 里带的就是最新持久化配置,所以此刻"已应用"= 读到的那个版本
-    const tts = this.readTtsRegistry();
-    this.appliedTtsRevision = tts.ok ? tts.registry.revision : -1;
-    this.appliedTtsServiceId = tts.ok ? tts.registry.activeServiceId : '';
+    this.appliedTtsRevision = ready.tts.appliedRevision;
+    this.appliedTtsServiceId = ready.tts.activeServiceId;
     this.host?.log.info(`演出引擎子进程已就绪 pid=${child.pid}`, { overlay: ready.overlayUrl });
   }
 
   private teardownChild(): void {
     this.child = null;
     this.ready = false;
+    this.appliedTtsRevision = -1;
+    this.appliedTtsServiceId = '';
     this.urls = null;
     this.statusCache = null;
     this.liveCache = false;

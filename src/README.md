@@ -1,3 +1,4 @@
+<!-- Owner: world.ts, tts/config.ts, tts/types.ts -->
 # cortico-world-vtuber
 
 直播演出 World:消费弹幕与对局事件,输出混编 TTS 语音与 Live2D 动作的连续演出。
@@ -580,48 +581,50 @@ expression 文件,由档案 `fx` 表逐特效声明文件名与时长;表情文�
 
 ## TTS
 
-TTS 是一张服务表:`worlds.vtuber.tts` 里按顺序放着若干条服务配置,`activeServiceId` 指当前
-在用的一条。协议(`openai-speech` / `voxcpm-legacy`)与管理方式(`external` /
-`managed-voxcpm`)是两个正交概念,配置模型、校验、旧配置解析与脱敏都在
-[`tts/config.ts`](tts/config.ts);当前服务解析、执行快照与适配器缓存都在
-[`tts/registry.ts`](tts/registry.ts);两种协议各一个适配器
-([`tts/openai-speech.ts`](tts/openai-speech.ts)、[`tts/voxcpm-legacy.ts`](tts/voxcpm-legacy.ts)),
-共用的收流循环在 [`tts/stream.ts`](tts/stream.ts),音频解码与包络在
-[`tts/audio.ts`](tts/audio.ts)。操作层面的说明(注册、Base URL 语义、试听、密钥、故障排查)
-在包根 [README](../README.md) 的「TTS 服务」一节,这里只记代码侧的分层。
+`worlds.vtuber.tts` 保存服务注册表,`activeServiceId` 指向当前服务。
+协议选择 `openai-speech` 或 `voxcpm-legacy`,进程管理选择 `external` 或 `managed-voxcpm`。
+配置契约在 [`tts/config.ts`](tts/config.ts),执行快照与适配器缓存由
+[`tts/registry.ts`](tts/registry.ts) 管理。协议适配器共用 [`tts/stream.ts`](tts/stream.ts)
+的收流循环与 [`tts/audio.ts`](tts/audio.ts) 的音频解码。控制台用法见包根
+[README](../README.md) 的「TTS 服务」一节。
+
+注册表保存由主进程负责,密钥通过宿主接口读取。演出子进程接收配置并返回实际应用的版本;
+启动回执也携带该版本,子进程退出后清除应用记录,控制台据此区分保存与应用状态。
 
 配置里没有 `tts` 时,读取时在内存生成一条内置 legacy 条目,把旧的 `ttsUrl`、`ttsProfile`
 与运行时/权重/声线库路径映射进去;读操作不写盘,第一次显式保存才落盘,并在那之前给部署
 配置留一份 `.bak-tts-migration-<时间戳>`。落盘时旧扁平字段同步成内置条目的兼容投影。
 
-每次开始合成一片音频时取一次冻结的执行快照(服务、鉴权、模型、声音、参数、解码与质量
-策略),整片含允许的回退都用同一份;切换只影响之后新发起的合成,在途与已预取的片按原服务
-放完。语速样本按服务/配置分命名空间,legacy 沿用旧公式以识别已有日志。
+每片合成开始时冻结服务配置,生成请求与整片对齐均使用该快照。流式前缀对齐通过
+`TtsStreamSink.begin` 交付绑定原服务的回调;质量策略与时长上限保存在 `TtsPiece` 中。
+服务切换只影响后续合成,在途与已预取的片继续按原配置处理。语速统计按服务配置分别记录。
 
-下面几节里 VoxCPM2 专有的行为(参考音频克隆、私有 `/stream`、对齐器、长静默重合成、
-32 秒硬上限)都只对 `voxcpm-legacy` 条目生效,通用 OpenAI 服务不继承这些假设。
+VoxCPM2 的私有协议与质量策略归 legacy 适配器所有。通用 Speech 保留完整音频,
+长静默报告仅供诊断。VoxCPM 的长静默重合成使用原配置的 `seed + 1`,最多重试一次。
 
 ### VoxCPM2(legacy)
 
-随包 server 运行时在 [`voxcpm2-server/`](voxcpm2-server/)；GGUF 与声线库通过
-内置 legacy 条目的 `legacy.runtime` 接入，空配置沿用原来的 `models/` 与 `voices/` 位置。
+本地运行时由控制台安装,托管服务的 `legacy.runtime` 指定运行时与模型路径。
+声线库使用对应 legacy 服务的 `legacy.runtime.voicesDir`,空配置使用部署默认目录。
 
 进程启停在「挂载」面板的「声音」那一行,只对 `managed-voxcpm` 条目可用:spawn
-`llama-tts-server.exe` ([`tts-server.ts`](tts-server.ts),端口取内置条目的服务根);
-World 停止时连带停掉它拉起的进程。external 条目即使跑在本机也不归 World 启停。
+`llama-tts-server.exe` ([`tts-server.ts`](tts-server.ts),端口取托管服务的根地址);
+运行中的进程保留启动时端口,修改端口后需停止再启动。停止阶段保持 `stopping`,
+确认进程退出后完成清理,世代号阻止旧进程回调改写新进程状态。World 停止时也等待托管进程退出。
 其余操作在「声线档案」和「时间点标注」面板：
 
 - **声线档案**:参考音频可「从本地导入」,缓存进配置的声线库目录(面板显示实际路径),
   也可直接选库里已有的;「试听参考」原声回放确认选对了人。带转写按续写克隆合成,
   只给音频是纯克隆。生成参数 `seed / cfg_value / inference_timesteps / max_steps / temperature`
-  同面板可调。**「保存档案」是唯一的生效动作**:写回内置条目的 `legacy.profile`,
+  同面板可调。**「保存档案」是唯一的生效动作**:写回当前 legacy 服务的 `legacy.profile`,
   同时把转写落成同名 `.txt` 侧车(下次选中这条声线自动带回来,清空转写就删掉侧车)。
   改了还没保存时面板会标出来——演出仍走已保存的那份。
 - **参考音频转码**:VoxCPM2 的 `reference_audio` 只吃 wav,声线库因此只存 wav。
   导入 mp3 / m4a 这类压缩格式时,[`audio-convert.ts`](audio-convert.ts) 按文件头判型,
   再调本机 ffmpeg 转成 24kHz 单声道 PCM16(模型的原生采样率)。ffmpeg 与 `bin/` 里的
   二进制一样不入库:先找包内 `voxcpm2-server/bin/`,再找 PATH;都没有就只收 wav,
-  报错里会说清缺什么。
+  报错里会说清缺什么。读取 WAV 参考音频支持 24bit 与 EXTENSIBLE,发送前统一为单声道 PCM16,
+  保留源采样率;已经合规的 WAV 保留原始字节。引用的文件缺失时直接报错。
 - **单次测试**:输入任意文本合成试听(空 = 固定测试句),**就在本页播放**;
   声卡侧同步播出一份,顺带验证音频链路。试听按**面板上**的档案合成(不是已保存的那份),
   所以换声线可以先听再决定存不存;回执里会写明这一句用的是哪条声线。合成完「保存 wav」

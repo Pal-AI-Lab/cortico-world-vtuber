@@ -220,11 +220,15 @@ export class IncrementalWavParser {
         const id = this.u32(this.pos);
         const declared = this.u32(this.pos + 4);
         if (id === FMT_TAG) {
-          // 'fmt ':16 字节块体才够读到 bitsPerSample
+          if (declared < 16) throw new Error('wav 的 fmt 块不足 16 字节');
           if (this.buf.length - this.pos - 8 < 16) break;
           const body = this.pos + 8;
+          const extensible = this.u16(body) === 0xfffe;
+          const required = extensible ? 40 : 16;
+          if (declared < required) throw new Error('wav 的 EXTENSIBLE fmt 块不足 40 字节');
+          if (this.buf.length - body < required) break;
           this.fmt = {
-            format: this.u16(body),
+            format: extensible ? this.u16(body + 24) : this.u16(body),
             channels: this.u16(body + 2),
             sampleRate: this.u32(body + 4),
             bitsPerSample: this.u16(body + 14),
@@ -232,14 +236,9 @@ export class IncrementalWavParser {
             dataOffset: body + declared + (declared % 2),
             dataLength: null,
           };
-          /*
-           * fmt 的扩展字节(cbSize、extensible 的子格式等)与块尾 padding 可能在下一块
-           * HTTP 数据里,不能用声明长度直接跳过去。先吃掉已经读到的 16 字节主体,余下
-           * 的交给现有的 skip 状态跨块消费;`end` 用声明长度算,声明值小于 16 的畸形块
-           * 也不会被推过头。
-           */
+          // 必需字段读齐后,剩余扩展字节与 padding 通过 skip 跨网络分块消费。
           const end = body + declared + (declared % 2);
-          this.pos = Math.min(body + 16, end);
+          this.pos = body + required;
           this.skip = Math.max(0, end - this.pos);
           this.state = this.skip > 0 ? 'skip' : 'chunks';
           continue;

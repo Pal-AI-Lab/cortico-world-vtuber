@@ -201,11 +201,11 @@ describe('IncrementalWavParser', () => {
     for (let i = 0; i < values.length; i++) expect(decoded.samples[i]).toBeCloseTo(values[i]!, 4);
   });
 
-  it('WAVE_FORMAT_EXTENSIBLE 报出格式与位深', () => {
+  it('WAVE_FORMAT_EXTENSIBLE 拒绝缺少扩展字段的 fmt 块', () => {
     const pcm = pcm16([0.5]);
     const bytes = wavBytes({ format: 0xfffe, channels: 1, sampleRate: 16000, bitsPerSample: 16, dataLength: pcm.length, pcm });
     const parser = new IncrementalWavParser();
-    expect(() => parser.push(bytes)).toThrow('不支持的 wav 格式: format=65534 bits=16');
+    expect(() => parser.push(bytes)).toThrow('wav 的 EXTENSIBLE fmt 块不足 40 字节');
   });
 
   it('结尾的半个样本由 finish() 丢掉并记数', () => {

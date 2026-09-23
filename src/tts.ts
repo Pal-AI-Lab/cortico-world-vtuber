@@ -24,6 +24,7 @@ export type {
   TtsAdapter,
   TtsCapabilities,
   TtsExecutionSnapshot,
+  TtsPcmAligner,
   TtsPiece,
   TtsStreamOptions,
   TtsStreamSink,

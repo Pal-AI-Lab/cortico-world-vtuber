@@ -1,3 +1,4 @@
+<!-- Owner: src/definition.ts, src/tts/config.ts -->
 # cortico-world-vtuber
 
 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 的 VTuber 演出 World,以独立 npm 包发布。
@@ -16,7 +17,7 @@ World 内部的分层、演出包格式、台本记号与 Live2D 适配写在 [`
 这是一个**扩展包**,不是 Cortico 的一部分。它按 Cortico 的扩展契约声明自己:
 
 ```jsonc
-"cortico": { "kind": "world", "api": 4, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
+"cortico": { "kind": "world", "api": 5, "consoleClient": "dist/console.js", "consoleStyle": "dist/console.css" }
 ```
 
 运行时它以 `cortico/<框架 src 下的路径>` import 框架(`cortico/world.ts`、
@@ -69,8 +70,18 @@ corepack pnpm build       # esbuild → dist/console.{js,css}
 
 ## TTS 服务
 
-TTS服务部分默认支持OpenAI Speech标准的TTS服务端口，您可以接入任何您希望的TTS服务！
-当然，我们也提供了支持的Voxcpm2默认服务，您可以通过以下的方式安装：
+在「声线档案」中添加服务,填写服务提供方的模型与声音标识,保存后选择当前服务。
+通用服务使用 [OpenAI Speech 接口](https://developers.openai.com/api/reference/typescript/resources/audio/subresources/speech/methods/create)。
+Base URL 是 API 前缀:填 `https://tts.example/v1` 时请求 `https://tts.example/v1/audio/speech`。
+程序保留反向代理的路径前缀,按配置追加 `audio/speech`,需要 `/v1` 时应显式填写。
+API Key 经宿主密钥接口保存到部署的 `.env`,服务配置只记录密钥引用;草稿试听中的临时 Key 仅供本次请求使用。
+
+WAV 与 PCM 可以增量播放;PCM 需要填写输出采样率和声道数。压缩音频收齐后由本机 ffmpeg 解码。
+接口响应应为二进制音频;当前收到 SSE 响应会报错。试听草稿不会切换当前服务。
+保存回执区分「已保存」与「已应用」,服务切换只影响后续新发起的合成,已经在途或预取的片段继续使用原配置。
+
+旧部署在首次读取时从原配置生成 VoxCPM2 服务条目,显式保存前保留迁移备份。
+本地 VoxCPM2 运行时由控制台安装与管理:
 
 - **运行时**装到 `<运行时根>/llama.cpp-omni/<release>/<平台后端>/`。二进制来自
   [Phantivia/llama.cpp-omni](https://github.com/Phantivia/llama.cpp-omni) 的 `tts-*` release
@@ -94,12 +105,12 @@ tsx scripts/aligner-gguf.ts --src ./aligner-hf --out <模型根>/vtuber
 ```
 
 出 `Qwen3-Aligner-LM-F16.gguf`(1.20 GB)与 `Qwen3-Aligner-Audio-F16.gguf`(0.66 GB)。
-两个文件在 `<模型根>/vtuber/` 里就自动认;放别处就在 `config.json` 的 `worlds.vtuber`
-节里指过去:
+两个文件在 `<模型根>/vtuber/` 里就自动认;放别处时,在「声线档案」中编辑托管
+VoxCPM 服务的运行时配置。注册表中的字段位于该条目的 `legacy.runtime`:
 
 ```jsonc
-"ttsAlignerLmFile":    "D:/weights/Qwen3-Aligner-LM-F16.gguf",
-"ttsAlignerAudioFile": "D:/weights/Qwen3-Aligner-Audio-F16.gguf"
+"alignerLmFile":    "D:/weights/Qwen3-Aligner-LM-F16.gguf",
+"alignerAudioFile": "D:/weights/Qwen3-Aligner-Audio-F16.gguf"
 ```
 
 **这两项一旦填了就是必须加载**:文件不在,TTS server 不启动,并报出缺的那个路径。

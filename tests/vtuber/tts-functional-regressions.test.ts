@@ -1,13 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Logger } from 'cortico/core/types.ts';
-import { IncrementalWavParser } from '../../src/tts/audio.ts';
+import { IncrementalWavParser, pcm16ToWav, samplesToPcm16Wav } from '../../src/tts/audio.ts';
 import { normalizeService, publicRegistry, virtualLegacyRegistry, type TtsRegistryConfig, type TtsServiceConfig } from '../../src/tts/config.ts';
 import { prepareTtsAudition } from '../../src/tts/audition.ts';
 import { legacySnapshotFromUrl } from '../../src/tts/registry.ts';
 import { OpenAiSpeechAdapter } from '../../src/tts/openai-speech.ts';
 import { VoxcpmLegacyAdapter } from '../../src/tts/voxcpm-legacy.ts';
+import type { TtsPcmAligner, TtsPiece, TtsStreamSink } from '../../src/tts/types.ts';
 import { VtuberWorldProxy } from '../../src/proxy.ts';
 import { TtsServerManager } from '../../src/tts-server.ts';
+import { VtuberWorld } from '../../src/world.ts';
+import { makeRawWav } from './helpers.ts';
 
 function wav(fmtSize = 18): Buffer {
   const dataAt = 20 + fmtSize + (fmtSize % 2);
@@ -195,5 +201,147 @@ describe('functional regression: managed process port', () => {
       expect(manager.state().url).toBe('http://127.0.0.1:8011');
       expect(manager.state().detail).toBeNull();
     } finally { await manager.stop(); }
+  });
+});
+
+describe('服务策略与配置归属', () => {
+  it('切换服务后,在途流的前缀与整片对齐仍使用原服务', async () => {
+    const state = virtualLegacyRegistry({}, 'http://original-service').registry;
+    state.services.push(service());
+    const pcm = new Uint8Array(new Int16Array([1000, -1000]).buffer);
+    const audio = pcm16ToWav([pcm], 16000);
+    const alignUrls: string[] = [];
+    const units = [{ text: '测试', start: 0, end: 0.1 }];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
+      alignUrls.push(String(url));
+      return Response.json({ units, duration: 0.1 });
+    });
+    const world = new VtuberWorld({
+      ttsRegistry: () => ({ ok: true, registry: state, virtual: false, notes: [] }),
+      ttsFetch: (async () => new Response(new Uint8Array(audio), {
+        headers: { 'Content-Type': 'audio/wav' },
+      })) as typeof fetch,
+      audioDevice: () => 'none',
+      alignEnabled: () => true,
+    });
+    const engine = world as unknown as {
+      synthStreamAligned(text: string, sink: TtsStreamSink, signal: AbortSignal): Promise<TtsPiece>;
+      alignOk: boolean | null;
+      ttsOk: boolean | null;
+    };
+    let alignPcm: TtsPcmAligner | undefined;
+    try {
+      await engine.synthStreamAligned('测试', {
+        begin: info => {
+          alignPcm = info.alignPcm;
+          state.activeServiceId = 'mine';
+          state.revision++;
+        },
+        pcm() {},
+      }, new AbortController().signal);
+      expect(alignPcm).toBeTypeOf('function');
+      expect(await alignPcm!(pcm, 16000, ['测试'])).toEqual(units);
+      expect(alignUrls).toEqual([
+        'http://original-service/v1/audio/align',
+        'http://original-service/v1/audio/align',
+      ]);
+      expect(engine.alignOk).toBeNull();
+      expect(engine.ttsOk).toBeNull();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it.each(['openai', 'legacy'] as const)('%s 只采用所属协议的长静默策略', async (kind) => {
+    const sampleRate = 8000;
+    const bytes = pcm16ToWav([new Uint8Array(sampleRate * 2 * 8)], sampleRate);
+    const fetchImpl = (async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.subarray(0, 44));
+        for (let at = 44; at < bytes.length; at += sampleRate) {
+          controller.enqueue(bytes.subarray(at, at + sampleRate));
+        }
+        controller.close();
+      },
+    }), { headers: { 'Content-Type': 'audio/wav' } })) as typeof fetch;
+    const snapshot = legacySnapshotFromUrl({ root: 'http://test', timeoutMs: 1000 });
+    const adapter = kind === 'openai'
+      ? new OpenAiSpeechAdapter(snapshot, fetchImpl)
+      : new VoxcpmLegacyAdapter(snapshot, fetchImpl);
+    let delivered = 0;
+    const piece = await adapter.synthStream('测试', { pcm: chunk => { delivered += chunk.length; } }, {
+      signal: new AbortController().signal,
+      ...(kind === 'openai' ? { maxDurationMs: 2000 } : {}),
+    });
+    expect(piece.silence?.triggered).toBe(true);
+    if (kind === 'openai') {
+      expect(piece.qualityPolicy).toBe('generic');
+      expect(piece.durationMs).toBe(8000);
+      expect(delivered).toBe(bytes.length - 44);
+      expect(piece.truncated).toBeUndefined();
+      expect(piece.maxAudioMs).toBeUndefined();
+    } else {
+      expect(piece.qualityPolicy).toBe('voxcpm');
+      expect(piece.durationMs).toBeLessThan(8000);
+      expect(delivered).toBeLessThan(bytes.length - 44);
+      expect(piece.truncated).toBe(true);
+      expect(piece.maxAudioMs).toBe(32000);
+    }
+  });
+
+  it.each([16, 24])('增量解析 %i bit EXTENSIBLE 在任意网络分块处保持样本完整', bits => {
+    const data = bits === 16
+      ? new Uint8Array(new Int16Array([-32768, 0, 16384]).buffer)
+      : Uint8Array.from([0, 0, 128, 0, 0, 0, 0, 0, 64]);
+    const bytes = makeRawWav({ format: 0xfffe, bits, fmtLen: 40, data });
+    const expected = Buffer.from(new Int16Array([-32768, 0, 16384]).buffer);
+    for (let at = 1; at < bytes.length; at++) {
+      expect(parse([bytes.subarray(0, at), bytes.subarray(at)]), `split=${at}`).toEqual(expected);
+    }
+    expect(parse(Array.from(bytes, b => Uint8Array.of(b)))).toEqual(expected);
+  });
+
+  it('注册表中的空运行时目录生效,清除构造时的旧路径', () => {
+    const state = virtualLegacyRegistry({}, 'http://127.0.0.1:8010').registry;
+    const world = new VtuberWorld({
+      ttsRuntimeDir: () => 'obsolete-runtime',
+      ttsBaseLmFile: () => 'obsolete-model',
+      ttsRegistry: () => ({ ok: true, registry: state, virtual: false, notes: [] }),
+      audioDevice: () => 'none',
+    });
+    expect(world.ttsConsole().runtime().own).toBe(false);
+    expect(world.ttsConsole().runtime().models.some(model => model.path.includes('obsolete'))).toBe(false);
+  });
+
+  it('草稿试听从所选服务的声线目录读取同名参考音频', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tts-service-voices-'));
+    const reference = samplesToPcm16Wav(Float32Array.from([0, 0.5, -0.5]), 16000);
+    writeFileSync(join(dir, 'voice.wav'), reference);
+    const state = virtualLegacyRegistry({}, 'http://127.0.0.1:8010').registry;
+    const other: TtsServiceConfig = {
+      ...state.services[0], id: 'other', management: 'external',
+      legacy: {
+        profile: { ...state.services[0].legacy!.profile, refAudio: 'voice.wav' },
+        runtime: { ...state.services[0].legacy!.runtime, voicesDir: dir },
+      },
+    };
+    state.services.push(other);
+    let body: Record<string, unknown> = {};
+    const world = new VtuberWorld({
+      ttsRegistry: () => ({ ok: true, registry: state, virtual: false, notes: [] }),
+      ttsFetch: (async (_url: unknown, init?: RequestInit) => {
+        body = JSON.parse(String(init?.body));
+        return new Response(new Uint8Array(reference), { headers: { 'Content-Type': 'audio/wav' } });
+      }) as typeof fetch,
+      audioDevice: () => 'none',
+    });
+    try {
+      const result = await world.ttsConsole().testService(other, '试听');
+      expect(result.wav).not.toBeNull();
+      expect(body.reference_audio).toBe(Buffer.from(reference).toString('base64'));
+      expect(state.activeServiceId).toBe('legacy-default');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

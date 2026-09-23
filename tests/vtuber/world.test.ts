@@ -411,7 +411,7 @@ describe('VtuberWorld', () => {
     expect(tries()).toBe(2);
     // 重试得是另一条 take:同一 seed 下把同一份请求发两遍,服务端给的是逐字节相同的音频
     const takes = ttsBodies.filter((b) => b.input === '带死气的一句。');
-    expect(takes[1].seed).not.toBe(takes[0].seed);
+    expect(takes[1].seed).toBe(Number(takes[0].seed) + 1);
     await waitFor(() => stage.events.some((m) => m.type === 'subtitle' && m.text === '带死气的一句。'));
     await mod.tools().find((t) => t.name === 'vtuber_interrupt')!.handler({}, { role: 'main', log: host.log });
   });
