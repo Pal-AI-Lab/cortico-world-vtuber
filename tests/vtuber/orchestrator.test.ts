@@ -16,7 +16,7 @@ import {
 import { SILENCE_MIN_MS } from '../../src/silence-scan.ts';
 import type { SubtitleCue } from '../../src/subtitle-cues.ts';
 import type { StateCue } from '../../src/states.ts';
-import { Envelope, StreamingEnvelope, type TtsPiece } from '../../src/tts.ts';
+import { Envelope, StreamingEnvelope, type TtsPcmAligner, type TtsPiece } from '../../src/tts.ts';
 import { EXAMPLE_PACK_DIR, loadPack } from '../../src/pack.ts';
 
 const pack = loadPack(EXAMPLE_PACK_DIR);
@@ -159,7 +159,7 @@ function makeStreamPerformer(opts: {
   align: boolean;
   unitMs?: number;
   unitsOnDone?: boolean;
-  alignPcm?: PerformerTts['alignPcm'];
+  alignPcm?: TtsPcmAligner;
   /** 音频 sink 支持音素感知切断(记入 cuts) */
   withCut?: boolean;
   /** PCM 内容:正弦频率(Hz);缺省全零(静音) */
@@ -192,7 +192,7 @@ function makeStreamPerformer(opts: {
   let phase = 0;
   const synthStream: NonNullable<PerformerTts['synthStream']> = async (text, sink, signal, maxDurationMs) => {
     const env = new StreamingEnvelope(SR);
-    sink.begin?.({ sampleRate: SR, envelope: env });
+    sink.begin?.({ sampleRate: SR, envelope: env, alignPcm: opts.alignPcm });
     const units = segmentUnits(text);
     const properMs = Math.max(unitMs, units.length * unitMs);
     const sil = opts.silence?.text === text ? opts.silence : null;
@@ -239,6 +239,8 @@ function makeStreamPerformer(opts: {
       text,
       wav: new Uint8Array(44),
       durationMs: emittedMs,
+      qualityPolicy: 'voxcpm',
+      maxAudioMs: 32_000,
       envelope: env,
       ...(truncated ? { truncated } : {}),
       ...(silenceHit && sil
@@ -317,7 +319,6 @@ function makeStreamPerformer(opts: {
         throw new Error(`不该走整段合成:${text}`);
       },
       synthStream,
-      alignPcm: opts.alignPcm,
     },
     streamEnabled: () => true,
     alignEnabled: () => opts.align,

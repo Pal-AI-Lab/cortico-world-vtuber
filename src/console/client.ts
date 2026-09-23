@@ -46,29 +46,77 @@ export interface VtsState {
   model: { name: string; id: string } | null;
 }
 
-/** `mount.ttsState`(也是 `mount.state` 里的 `tts` 一支) */
-export interface TtsState {
-  phase: 'stopped' | 'starting' | 'running' | 'error' | string;
+/**
+ * TTS 子进程当前加载的资源(`tts.state` 的 `local.resources`,`mount.ttsState` 不带)。
+ *
+ * 路径 `ready` 与 `configured` 都要看:前者说文件在不在,后者说这个路径是不是配置给的
+ * ——自备目录里的权重与随包目录的同名文件在面板上是两回事。
+ */
+export interface TtsResources {
+  server: { path: string; ready: boolean };
+  baseLm: { path: string; ready: boolean; configured: boolean };
+  acoustic: { path: string; ready: boolean; configured: boolean };
+  alignerLm: { path: string; ready: boolean; configured: boolean };
+  alignerAudio: { path: string; ready: boolean; configured: boolean };
+  /** 任一对齐路径显式配置后,对齐模型成为本次启动的必需资源 */
+  alignerRequired: boolean;
+  alignerReady: boolean;
+  ready: boolean;
+}
+
+/**
+ * 本地进程的启停状态与它加载的资源。
+ *
+ * `tts.state` 的 `local` 带 `resources`(面板要报"缺哪个权重");`mount.ttsState`
+ * 只带其中的就绪读数,所以那几项在挂载行上是可缺席的。
+ */
+export interface TtsLocalProcess {
+  phase: string;
   url: string;
   pid: number | null;
   detail: string | null;
+  resources?: TtsResources;
+}
+
+/** `tts.state` 的 `local`:本地进程状态 + 探得通与否。external 服务为 null。 */
+export interface TtsLocalState extends TtsLocalProcess {
+  reachable: boolean;
+  resources: TtsResources;
+}
+
+/** 本地 llama-tts-server 的运行状态(旧的 `mount.ttsState` 形状)。 */
+export interface TtsState extends TtsLocalProcess {
   reachable?: boolean;
-  resources: {
-    server: { path: string; ready: boolean };
-    baseLm: { path: string; ready: boolean; configured: boolean };
-    acoustic: { path: string; ready: boolean; configured: boolean };
-    alignerLm: { path: string; ready: boolean; configured: boolean };
-    alignerAudio: { path: string; ready: boolean; configured: boolean };
-    alignerRequired: boolean;
-    alignerReady: boolean;
-    ready: boolean;
-  };
+  resources: TtsResources;
+}
+
+/** `mount.ttsState`(也是 `mount.state` 里的 `tts` 一支)。 */
+export interface TtsMountState {
+  serviceId: string;
+  serviceName: string;
+  protocol: string;
+  /** 已落盘的配置版本 */
+  savedRevision: number;
+  /** 演出子进程确认应用到的版本 */
+  appliedRevision: number;
+  /** 已保存,但子进程还没确认应用 */
+  pendingApply: boolean;
+  /** 当前服务由 World 管本地进程时为真;external 服务没有启停可言 */
+  managed: boolean;
+  /** managed 服务的进程状态;external 服务为 null */
+  local: TtsLocalProcess | null;
+  /** 本地进程的阶段;external 服务是 `external`,不是错误 */
+  phase: string;
+  pid: number | null;
+  detail: string | null;
+  url: string;
+  reachable: boolean;
 }
 
 /** `mount.state`:三条链路一次问齐。某一条拿不到就是 null(那一行显示"不可用")。 */
 export interface MountState {
   vts: VtsState | null;
-  tts: TtsState | null;
+  tts: TtsMountState | null;
   stream: { up: boolean; url: string | null } | null;
 }
 
@@ -172,10 +220,116 @@ export interface TtsVoiceInfo {
   text: string;
 }
 
-/** `tts.state`:server 状态 + 生效档案 + 声线库一次问齐 */
-export interface TtsPanelState extends TtsState {
-  /** server 探得通(合成要它在跑;启停在「挂载」面板) */
-  reachable: boolean;
+export type TtsProtocol = 'openai-speech' | 'voxcpm-legacy';
+export type TtsManagement = 'external' | 'managed-voxcpm';
+export type TtsResponseFormat = 'wav' | 'pcm' | 'mp3' | 'opus' | 'aac' | 'flac';
+export type TtsDelivery = 'auto' | 'buffered';
+
+/** JSON 值;扩展参数(`extraBody`)只收这一集。 */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+/** raw PCM 输出的音频描述;不声明时服务端按 24 kHz 单声道。 */
+export interface TtsPcmConfig {
+  sampleRate: number;
+  channels: 1 | 2;
+  encoding: 's16le';
+}
+
+/** legacy 运行时路径集合;只对 voxcpm-legacy 服务有意义。 */
+export interface TtsLegacyRuntime {
+  runtimeDir: string;
+  runtimeRelease: string;
+  baseLmFile: string;
+  acousticFile: string;
+  alignerLmFile: string;
+  alignerAudioFile: string;
+  voicesDir: string;
+}
+
+/**
+ * 一条 TTS 服务。`speechPath` / `speed` / `instructions` / `extraBody` / `headers` /
+ * `pcm` / `legacy` 都是可缺席的:省略就是"这一条没有它",`normalizeService` 落盘时
+ * 也不会补一个空壳上去。
+ */
+export interface TtsServiceConfig {
+  id: string;
+  name: string;
+  protocol: TtsProtocol;
+  management: TtsManagement;
+  /** API 前缀(通常含 /v1);不是完整 speech 地址 */
+  baseUrl: string;
+  /** 相对 API 前缀的路径;缺省 audio/speech */
+  speechPath?: string;
+  auth: TtsServiceAuth;
+  model: string;
+  voice: string | { id: string };
+  responseFormat: TtsResponseFormat;
+  delivery: TtsDelivery;
+  timeoutMs: number;
+  speed?: number;
+  instructions?: string;
+  extraBody?: Record<string, JsonValue>;
+  /** 非敏感扩展头;鉴权头走 auth */
+  headers?: Record<string, string>;
+  pcm?: TtsPcmConfig;
+  legacy?: { profile: TtsProfile; runtime: TtsLegacyRuntime };
+}
+
+/**
+ * 面板交回去的鉴权。密钥名由服务端按服务 id 派生,所以表单只在**换服务时**
+ * 带上已经生效的那个 `secretRef`;其余情况下传 `{ type: 'bearer' }`,
+ * 由 `normalizeService` 沿用原值或派生一个新的。
+ */
+export type TtsServiceAuth =
+  | { type: 'none' }
+  | { type: 'bearer'; secretRef?: string };
+
+/** `services.state` 里那一条:密钥材料已被剥掉,只剩"是否已设置"。 */
+export type PublicTtsService = Omit<TtsServiceConfig, 'auth'> & {
+  auth: { type: 'none' } | { type: 'bearer'; secretRef: string; apiKeyConfigured: boolean };
+};
+
+/** `tts.services` 里那几只"已保存 / 已应用"的读数;`tts.state` 只回其中的 appliedRevision。 */
+export interface TtsApplyState {
+  savedRevision: number;
+  appliedRevision: number;
+  appliedServiceId: string;
+  pendingApply: boolean;
+}
+
+/** `tts.services`:服务表(已脱敏)连同"已保存 / 已应用"的差别。 */
+export interface TtsServicesState extends TtsApplyState {
+  version: number;
+  /** 已落盘的配置版本;保存时要原样回传作 baseRevision */
+  revision: number;
+  activeServiceId: string;
+  services: PublicTtsService[];
+  /** 读写这条注册表时攒下的诊断(虚拟迁移、地址异常等) */
+  notes: string[];
+  /** 配置读不出来时的错误;此时 services 为空 */
+  error?: string;
+  protectedIds: string[];
+}
+
+/** `tts.saveService` / `activateService` / `deleteService` 的回执。 */
+export interface TtsSaveReceipt extends TtsApplyState {
+  message: string;
+}
+
+/** `tts.state`:当前服务、本地进程、生效档案与声线库一次问齐 */
+export interface TtsPanelState {
+  registry: Omit<TtsServicesState, keyof TtsApplyState>;
+  /** 子进程当前应用的配置版本;小于 revision 即"已保存未应用" */
+  appliedRevision: number;
+  /** 本地 llama-tts-server 的进程状态;当前服务是 external 时为 null(没有本地资源不是错误) */
+  local: TtsLocalState | null;
+  /** 当前服务是否由 World 管理本地进程 */
+  managed: boolean;
+  /** 当前服务是否是内置 legacy 条目(声线与本地运行时区域只对它展示) */
+  legacy: boolean;
+  /** World 实际当作内置 legacy 条目的那一条 id;空串 = 没有 legacy 条目 */
+  builtinServiceId: string;
+  /** 内置 legacy 条目的声线档案 */
   profile: TtsProfile;
   voices: TtsVoiceInfo[];
   /** voices/ 的绝对路径,提示人参考音频缓存在哪 */
@@ -190,9 +344,8 @@ export interface SavedVoice {
   converted: string | null;
 }
 
-/** `tts.test` 的回执($binary 之外那条:wav 是 base64) */
+/** `tts.test` / `tts.testService` 的回执(wav 是 base64) */
 export interface TtsTestResult {
-  ok: boolean;
   message: string;
   wav: string | null;
 }
@@ -201,6 +354,8 @@ export interface TtsTestResult {
 export interface AlignState {
   /** 演出流水线里每片都标注(配置项「逐分片时间点标注」) */
   enabled: boolean;
+  /** 当前 TTS 服务有没有对齐能力;false 是"没有配置对齐",不是"对齐失败" */
+  capable: boolean;
   /** 对齐器随 TTS server 加载了 */
   available: boolean;
   lastOk: boolean | null;
@@ -336,6 +491,24 @@ export function colorField(
 /** 一行灰色小注(导入提示、单元预览这类)。 */
 export function dimLine(ctx: ConsolePanelContext, text = ''): HTMLElement {
   return ctx.ui.h('div', 'pagedesc vt-dim', text);
+}
+
+/** 「最终请求地址」的默认路径段;服务端 `speechUrlOf` 同值。 */
+export const TTS_SPEECH_PATH_DEFAULT = 'audio/speech';
+
+/** 单片合成超时的上下界与默认值;与 `TTS_TIMEOUT_*` 同值,钳制仍归服务端。 */
+export const TTS_TIMEOUT_MIN_MS = 1_000;
+export const TTS_TIMEOUT_MAX_MS = 90_000;
+export const TTS_TIMEOUT_DEFAULT_MS = 60_000;
+
+/**
+ * 合成请求的最终地址。与 World 的 `speechUrlOf` 同一套拼法:纯字符串接缝,
+ * 不用 `new URL(rel, base)`——反向代理前缀(`https://host/tts/v1`)会被它吃掉。
+ */
+export function speechUrlOf(service: Pick<TtsServiceConfig, 'baseUrl' | 'speechPath'>): string {
+  const base = service.baseUrl.trim().replace(/\/+$/, '');
+  const path = (service.speechPath ?? '').trim().replace(/^\/+/, '') || TTS_SPEECH_PATH_DEFAULT;
+  return `${base}/${path}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -6,6 +7,11 @@ import { defineConfig } from 'vitest/config';
  * 模块钩子做,包内一行不改;别名与 tsconfig 的 `paths` 必须同步改。
  */
 const FRAMEWORK_SRC = fileURLToPath(new URL('../BOT/src/', import.meta.url));
+/**
+ * 框架 checkout 是链接时(junction / symlink,Windows 上很常见),vite 解析出的
+ * 是真实路径,`fs.allow` 拿别名路径去比会判成"文件不存在"。两个都放行。
+ */
+const FRAMEWORK_REAL = realpathSync(FRAMEWORK_SRC);
 
 export default defineConfig({
   resolve: {
@@ -14,7 +20,7 @@ export default defineConfig({
   // 框架 checkout 在本包目录之外,要显式放进 vite 的可服务范围,否则经 jsdom 那条
   // 路加载的框架前端模块会被当成不存在。
   server: {
-    fs: { allow: [fileURLToPath(new URL('./', import.meta.url)), FRAMEWORK_SRC] },
+    fs: { allow: [fileURLToPath(new URL('./', import.meta.url)), FRAMEWORK_SRC, FRAMEWORK_REAL] },
   },
   test: {
     include: ['tests/**/*.test.ts'],

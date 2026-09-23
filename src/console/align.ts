@@ -92,6 +92,8 @@ export const alignPanel: ConsolePanel = {
     let duration = 0;
     /** 当前这段音频的 base64;标注时原样交给服务端 */
     let audioB64 = '';
+    /** 当前服务有没有对齐能力;false 时按钮上写的是"这不是服务故障" */
+    let capable = false;
     let available = false;
     /** 逐字稿的最新值,等下一拍合流去问单元表;null = 没有待问的改动 */
     let pendingText: string | null = null;
@@ -303,14 +305,18 @@ export const alignPanel: ConsolePanel = {
       try {
         const st = await ctx.invoke<AlignState>('state');
         if (ctx.signal.aborted) return;
-        available = !!st.available;
+        capable = !!st.capable;
+        available = capable && !!st.available;
         const last = st.lastOk == null ? '还没跑过' : st.lastOk ? '正常' : '上次失败';
         statusBox.replaceChildren(ui.kv([
           {
             k: '对齐器',
-            v: available
-              ? ui.pill('已加载', 'on')
-              : ui.pill('未加载(TTS server 启动时没带对齐模型)', 'off'),
+            // 「这条服务没有对齐能力」与「对齐器没起来」是两回事:前者换服务,后者看启动
+            v: !capable
+              ? ui.pill('当前服务没有对齐能力(只随本地 VoxCPM2 服务提供)', 'plain')
+              : available
+                ? ui.pill('已加载', 'on')
+                : ui.pill('未加载(服务启动时没带对齐模型)', 'off'),
           },
           {
             k: '演出流水线',
@@ -320,6 +326,7 @@ export const alignPanel: ConsolePanel = {
         ]));
       } catch (err) {
         if (ctx.signal.aborted) return;
+        capable = false;
         available = false;
         statusBox.replaceChildren(ui.kv([{ k: '状态', v: `不可用: ${errText(err)}` }]));
       } finally {
@@ -332,6 +339,9 @@ export const alignPanel: ConsolePanel = {
       btnRun.disabled = !available;
       btnSynth.disabled = !available;
       btnPlay.disabled = !duration;
+      btnRun.title = capable
+        ? ''
+        : '当前服务没有对齐能力:对齐只随本地 VoxCPM2(legacy)服务提供';
     }
 
     async function refreshUnits(text: string): Promise<void> {

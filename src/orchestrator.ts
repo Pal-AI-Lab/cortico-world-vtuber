@@ -19,7 +19,7 @@ import {
   summarizeSubtitleCues,
   type SubtitleCue,
 } from './subtitle-cues.ts';
-import { decodeWav, type StreamingEnvelope, type TtsPiece, type TtsStreamSink } from './tts.ts';
+import { decodeWav, type StreamingEnvelope, type TtsPcmAligner, type TtsPiece, type TtsStreamSink } from './tts.ts';
 import type { Channel, PerformancePack } from './pack.ts';
 
 const BOUNDARY_SAME_LINE_MS = 100;
@@ -138,10 +138,6 @@ export const PAUSE_PRIORS: PausePriors = { endPunctMs: 570, midPunctMs: 200, voi
 const OVERRUN_FORGIVE_MS = 4000;
 const OVERRUN_FORGIVE_RATIO = 1.8;
 /**
- * TTS server 的解码步数上限使输出恰好在 32000ms 停止；此信号独立于文本预算。与无效对齐、未被本地截流及文本预算不足共同构成末级时长兜底条件。
- */
-const TTS_SERVER_MAX_AUDIO_MS = 32_000;
-/**
  * 静默段几乎从片头开始且覆盖实测时长九成以上时，整片作废，不送声卡或字幕。静默必须严格连续，任一有声 hop 都会断开区间，避免把笑腔、拖音或间歇停顿合并为整片静默。
  */
 const DEAD_SEG_MAX_START_MS = 200;
@@ -198,8 +194,6 @@ export interface PerformerTts {
   synth(text: string, signal?: AbortSignal): Promise<TtsPiece>;
   /** 流式合成;server 不支持或开关关闭时缺席。返回的完整片可能带 units(World 收流后对齐)。maxDurationMs=跑飞止损预算,超出即掐流保留已收部分 */
   synthStream?(text: string, sink: TtsStreamSink, signal: AbortSignal, maxDurationMs?: number): Promise<TtsPiece>;
-  /** 对一段 PCM16 前缀跑对齐(锚点抢时间用);对齐不可用返回 null */
-  alignPcm?(pcm: Uint8Array, sampleRate: number, units: string[]): Promise<AlignedUnit[] | null>;
 }
 
 /** onCue 的一条:标签词与所属通道(Reset 无通道,记 'reset') */
@@ -290,6 +284,8 @@ interface StreamSeg {
   seamCommands: BeatCommand[];
   sampleRate: number;
   envelope: StreamingEnvelope | null;
+  /** 合成开始时选定的对齐器,后续服务切换不改变本段归属。 */
+  alignPcm?: TtsPcmAligner;
   /** 播放会话开启前积压的分块 */
   chunks: Uint8Array[];
   /** 全部已收分块(前缀对齐要用原始 PCM;片播完释放) */
@@ -1427,9 +1423,10 @@ export class Performer {
     const t0 = this.now();
     try {
       const sink: TtsStreamSink = {
-        begin: ({ sampleRate, envelope }) => {
+        begin: ({ sampleRate, envelope, alignPcm }) => {
           seg.sampleRate = sampleRate;
           seg.envelope = envelope;
+          seg.alignPcm = alignPcm;
           this.gate.pulse();
         },
         pcm: (chunk) => {
@@ -1445,7 +1442,7 @@ export class Performer {
       seg.result = result;
       seg.synthDone = true;
       const silence = result.silence;
-      const silenceCut = silence?.triggered === true;
+      const silenceCut = result.qualityPolicy === 'voxcpm' && silence?.triggered === true;
       if (silenceCut) {
         /*
          * 错误生产的唯一签名:音频里出现了超大连续静默段(判据与依据见
@@ -1506,17 +1503,20 @@ export class Performer {
         data: { recvMs, audioMs, units: b.units, truncated: result.truncated === true, silenceCut },
       });
       /*
-       * 末级时长兜底须同时满足：对齐判废、未被本地截流、音频达到 server 硬上限、实测时长超过文本预算。仅有对齐失败或估计偏差不足以触发裁剪，截流后的时长不能再作为二次裁剪证据。
+       * 末级时长兜底须同时满足：对齐判废、未被本地截流、音频达到后端硬上限、实测时长超过文本预算。仅有对齐失败或估计偏差不足以触发裁剪，截流后的时长不能再作为二次裁剪证据。
        * 该分支覆盖静默检测无法识别的持续杂音尾部；长文本本就需要该时长时由预算条件放行。
+       * 硬上限只是 VoxCPM server 的属性：通用服务不给这个数，整条兜底对它不适用。
        * 切点仍取该对齐表的 lastGoodEndMs；整表已判废时，该局部切点的可信性仍是未解决的限制。
        */
+      const backendCapMs = result.maxAudioMs;
       if (
-        result.alignBad
+        backendCapMs !== undefined
+        && result.alignBad
         && !result.truncated
-        && result.durationMs >= TTS_SERVER_MAX_AUDIO_MS
+        && result.durationMs >= backendCapMs
         && result.durationMs > b.estMs
       ) {
-        this.cutTail(seg, result.alignBad.lastGoodEndMs, result.durationMs, '跑飞止损:对齐判废+撞 server 时长上限', '跑飞止损');
+        this.cutTail(seg, result.alignBad.lastGoodEndMs, result.durationMs, '跑飞止损:对齐判废+撞后端时长上限', '跑飞止损');
       }
       // 这一段已经在播(流式路的常态):开播时字幕走的是校准估计,对齐到手后重发时间轴
       if (!seg.dead) this.reemitSubtitle(seg);
@@ -1947,7 +1947,7 @@ export class Performer {
    * PCM 没多覆盖出内容,重发只会拿到同样拒掉的结果。对齐不可用或失败给 null。
    */
   private alignSegPrefix(seg: StreamSeg, units: string[], count: number): Promise<PrefixAlign | null> {
-    const alignPcm = this.d.tts.alignPcm;
+    const alignPcm = seg.alignPcm;
     const envelope = seg.envelope;
     if (!alignPcm || !envelope) return Promise.resolve(null);
     if (seg.prefixInFlight) return seg.prefixInFlight;
@@ -2135,7 +2135,7 @@ export class Performer {
         return;
       }
       const envelope = seg.envelope;
-      if (!this.d.tts.alignPcm || !envelope || seg.synthDone) return;
+      if (!seg.alignPcm || !envelope || seg.synthDone) return;
       // 抢跑:锚点单元已确定进了音频,且离死线不远(否则等全量对齐更省)
       const now = this.now();
       const ready = pending.filter(
