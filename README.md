@@ -47,9 +47,9 @@ corepack pnpm build
 
 ## 开发
 
-`tsconfig.json` 的 `paths` 与 `vitest.config.ts` 的 `resolve.alias` 都把 `cortico/*` 指向
-`../BOT/src/`——也就是**与本目录同级的框架 checkout**。框架放在别处时改这两处(它们必须
-同步)。生产里不靠这两条:那时解析由框架的模块钩子完成。
+开发期 `cortico/*` 经 devDependency `cortico`(npm 上的框架包)解析。要对着本地未发版的框架改动开发,在本目录执行
+`pnpm link <框架 checkout>`;它会往 `pnpm-workspace.yaml` 写一条 `overrides`,提交前撤掉。
+生产里不靠它:那时解析由框架的模块钩子完成。
 
 ```bash
 corepack pnpm typecheck   # tsc --noEmit,Node 侧与浏览器侧一份配置一起 check

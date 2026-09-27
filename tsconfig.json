@@ -16,12 +16,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    // 开发期把 `cortico/*` 指到同级的框架 checkout。装进宿主运行时不靠它:
-    // 那时解析由框架的 `src/plugins/runtime.ts` 注册的模块钩子完成。
-    "paths": {
-      "cortico/*": ["../BOT/src/*"]
-    }
+    "noEmit": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
