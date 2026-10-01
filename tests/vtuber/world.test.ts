@@ -1240,6 +1240,74 @@ describe('VtuberWorld', () => {
     expect(ttsBodies[ttsBodies.length - 1].reference_audio).toBe(inUse);
   });
 
+  /*
+   * TTS 进程崩溃停摆期间,vtuber_act 的回执照报「已排入演出」,bot 不知道观众什么都没听到。
+   */
+  it('TTS 不可达时 vtuber_act 回执如实报 TTS 不可用,不报已排入', async () => {
+    const mod2 = new VtuberWorld({
+      botName: 'bot',
+      streamPort: 0,
+      vtsWsUrl: 'ws://127.0.0.1:1',
+      ttsUrl: 'http://127.0.0.1:1',
+      ttsVoicesDir: () => join(serverDir, 'voices'),
+      audioDevice: () => 'none',
+    });
+    const host2 = new FakeHost();
+    await mod2.start(host2);
+    try {
+      const act = mod2.tools().find((tool) => tool.name === 'vtuber_act');
+      const result = await act?.handler({ script: '大家好。' }, { role: 'main', log: host2.log, callId: 'tts-down' });
+      expect(result).toContain('TTS 不可用');
+      expect(result).toContain('http://127.0.0.1:1 不可达');
+      expect(result).toContain('字幕也不会上屏');
+      expect(result).not.toContain('已排入演出');
+      // 回执已经交代过这次调用没出声,随后的合成失败不再另发一条
+      await waitFor(() => host2.logs.some((l) => l.msg === 'TTS 合成失败,该片跳过'));
+      expect(host2.notes.filter((n) => n.includes('合成失败'))).toEqual([]);
+    } finally {
+      await mod2.stop();
+    }
+  });
+
+  /*
+   * 合成失败只写进运行日志,bot 收不到任何信号。
+   */
+  it('TTS 可达但合成失败:向 bot 发一条合成失败事件,同一次调用只报一条', async () => {
+    const failing = createServer((req, res) => {
+      if (req.url === '/health') { res.end('{"ok":true}'); return; }
+      if (req.url === '/v1/audio/speech/stream') { res.writeHead(404); res.end(); return; }
+      res.writeHead(500);
+      res.end('ggml-cuda pool_used');
+    });
+    await new Promise<void>((r) => failing.listen(0, '127.0.0.1', () => r()));
+    const mod2 = new VtuberWorld({
+      botName: 'bot',
+      streamPort: 0,
+      vtsWsUrl: 'ws://127.0.0.1:1',
+      ttsUrl: `http://127.0.0.1:${(failing.address() as { port: number }).port}`,
+      ttsVoicesDir: () => join(serverDir, 'voices'),
+      audioDevice: () => 'none',
+    });
+    const host2 = new FakeHost();
+    await mod2.start(host2);
+    try {
+      const act = mod2.tools().find((tool) => tool.name === 'vtuber_act');
+      const result = await act?.handler(
+        { script: '第一句。【点头】第二句。' },
+        { role: 'main', log: host2.log, callId: 'synth-fail' },
+      );
+      expect(result).toContain('已排入演出');
+      await waitFor(() => host2.logs.filter((l) => l.msg === 'TTS 合成失败,该片跳过').length >= 2);
+      const notes = host2.notes.filter((n) => n.includes('合成失败'));
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toContain('call_id=synth-fail');
+      expect(notes[0]).toContain('没有声音,字幕也没上屏');
+    } finally {
+      await mod2.stop();
+      await new Promise<void>((r) => failing.close(() => r()));
+    }
+  });
+
   it('vtsConsole:连接→模型信息与表情复位;测试动作走注入链路;断开归零', async () => {
     const vts = new FakeVts();
     await vts.start();

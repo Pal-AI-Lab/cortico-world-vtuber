@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nullLogger } from 'cortico/core/util.ts';
-import { TtsServerManager } from '../../src/tts-server.ts';
+import { TTS_RESTART_MAX, TtsServerManager, type TtsServerEvent } from '../../src/tts-server.ts';
 import { recordingLogger, type LogLine } from './helpers.ts';
 
 /** 置位时让 spawn 学 Windows 应用控制拦截:同步抛 errno=UNKNOWN;其余时候走真 spawn */
@@ -99,6 +99,66 @@ describe('TtsServerManager', () => {
     const exit = logs.find((l) => l.event === 'exit')!;
     expect(exit).toMatchObject({ area: 'worlds.vtuber', level: 'warn', msg: 'TTS server 异常', data: { exitCode: 3 } });
     expect((exit.data as { detail: string }).detail).toContain('loading model');
+  });
+
+  /*
+   * 进程在 running 中崩溃退出后没人重新拉起,只能等人去面板点启动。
+   */
+  it('running 中崩溃退出 → 自动重启回到 running,先报 crash 再报 ready', async () => {
+    const port = await freePort();
+    const dir = mkdtempSync(join(tmpdir(), 'tts-crash-'));
+    const marker = join(dir, 'crashed-once').replace(/\\/g, '/');
+    // 第一次起来后自己退出(模拟 CUDA 断言),第二次起来就一直活着
+    const script = `const fs=require('node:fs');const first=!fs.existsSync('${marker}');`
+      + `require('node:http').createServer((q,r)=>r.end('{"ok":true}')).listen(${port},'127.0.0.1',()=>{`
+      + `if(first){fs.writeFileSync('${marker}','');setTimeout(()=>process.exit(9),200);}});`;
+    const events: TtsServerEvent[] = [];
+    try {
+      mgr = new TtsServerManager({
+        runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+        port,
+        log: nullLogger(),
+        commandOverride: { command: process.execPath, args: ['-e', script] },
+        healthIntervalMs: 30,
+        restartBackoffMs: 50,
+        onEvent: (e) => events.push(e),
+      });
+      const firstPid = mgr.start().pid;
+      await waitFor(() => events.filter((e) => e.kind === 'ready').length === 2);
+      expect(events.map((e) => e.kind)).toEqual(['ready', 'crash', 'ready']);
+      expect(events[1]).toMatchObject({ kind: 'crash', exitCode: 9, attempt: 1, max: TTS_RESTART_MAX });
+      expect(events[2]).toEqual({ kind: 'ready', autoRestart: 1 });
+      const st = mgr.state();
+      expect(st.phase).toBe('running');
+      expect(st.autoRestart).toBeNull();
+      expect(st.pid).not.toBe(firstPid);
+    } finally {
+      await mgr?.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('连续崩溃有界:重启 TTS_RESTART_MAX 次后停在 error,不再拉起', async () => {
+    const port = await freePort();
+    const events: TtsServerEvent[] = [];
+    mgr = new TtsServerManager({
+      runtimeDir: () => 'unused', serverExe: () => 'llama-tts-server.exe', modelsDir: 'unused',
+      port,
+      log: nullLogger(),
+      commandOverride: { command: process.execPath, args: ['-e', 'process.exit(9)'] },
+      healthIntervalMs: 30,
+      restartBackoffMs: 20,
+      onEvent: (e) => events.push(e),
+    });
+    mgr.start();
+    await waitFor(() => events.some((e) => e.kind === 'crash' && e.attempt === 0), 10_000);
+    const crashes = events.filter((e) => e.kind === 'crash');
+    expect(crashes.map((e) => (e as { attempt: number }).attempt))
+      .toEqual([...Array.from({ length: TTS_RESTART_MAX }, (_, i) => i + 1), 0]);
+    // 退避逐次加倍
+    expect(crashes.slice(0, -1).map((e) => (e as { delayMs: number }).delayMs))
+      .toEqual(Array.from({ length: TTS_RESTART_MAX }, (_, i) => 20 * 2 ** i));
+    expect(mgr.state()).toMatchObject({ phase: 'error', failure: 'crash', autoRestart: null, pid: null });
   });
 
   it('缺 bin/models → 同步 error,不 spawn', async () => {
