@@ -16,14 +16,46 @@ export type TtsServerPhase = 'stopped' | 'starting' | 'running' | 'stopping' | '
 /** 收尾时等 SIGTERM 生效的时长;到点还没退就 SIGKILL */
 const SHUTDOWN_GRACE_MS = 3000;
 
+/*
+ * 崩溃自动重启沿用框架 MC 观察者客户端的策略(worlds/minecraft 的 GameClient.scheduleRestart
+ * 与 restartMax 默认值):上限 3 次,首次等 30 秒、之后逐次加倍,相邻两次崩溃隔 10 分钟以上计数清零。
+ * 只有进程在 starting/running 中自行退出才重启;拉起失败、加载超时、人为停止都不重启。
+ */
+export const TTS_RESTART_MAX = 3;
+const RESTART_BACKOFF_MS = 30_000;
+const RESTART_WINDOW_MS = 600_000;
+
+/** 自动重启的进度;phase=error 且 dueAt 非空 = 等着重启,phase=starting = 重启出来的进程在加载 */
+export interface TtsAutoRestart {
+  attempt: number;
+  max: number;
+  /** 计划拉起的墙钟时刻;已拉起则为 null */
+  dueAt: number | null;
+}
+
 export interface TtsServerState {
   phase: TtsServerPhase;
   url: string;
   /** 缺文件/退出码之类的最近错误;phase=error 时必有 */
   detail: string | null;
   pid: number | null;
+  /** phase=error 的来由:crash=进程自行退出;launch=拉起失败、缺文件或加载超时 */
+  failure: 'crash' | 'launch' | null;
+  /** 崩溃后的自动重启;没在重启时为 null */
+  autoRestart: TtsAutoRestart | null;
   resources: TtsServerResources;
 }
+
+/**
+ * 进程生命周期里 World 要转告 bot 的节点。
+ * crash:进程在 starting/running 中自行退出;attempt=0 表示已到上限,不再自动重启。
+ * ready:health 通过(手动启动与自动重启都会来)。
+ * failed:不经进程退出的失败(拉起失败、缺文件、加载超时);autoRestart 非空表示是自动重启那一次没起来。
+ */
+export type TtsServerEvent =
+  | { kind: 'crash'; detail: string; exitCode: number | null; attempt: number; max: number; delayMs: number }
+  | { kind: 'ready'; autoRestart: number | null }
+  | { kind: 'failed'; detail: string; autoRestart: number | null };
 
 export interface TtsServerResource {
   path: string;
@@ -65,7 +97,10 @@ export interface TtsServerOptions {
   /** health 轮询间隔/上限(测试调小) */
   healthIntervalMs?: number;
   healthTimeoutMs?: number;
+  /** 自动重启首次等待(测试调小);缺省 30 秒 */
+  restartBackoffMs?: number;
   fetchImpl?: typeof fetch;
+  onEvent?: (event: TtsServerEvent) => void;
 }
 
 /**
@@ -97,6 +132,12 @@ export class TtsServerManager {
   private gen = 0;
   /** 在途的收尾;同一个进程的重复收尾合流到它,免得后一次在进程还没死时就返回 */
   private pendingShutdown: Promise<void> | null = null;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoRestart: TtsAutoRestart | null = null;
+  private failure: TtsServerState['failure'] = null;
+  /** 相邻异常退出计数及上次时刻 */
+  private crashCount = 0;
+  private lastCrashAt = 0;
 
   constructor(opts: TtsServerOptions) {
     this.opts = opts;
@@ -114,19 +155,27 @@ export class TtsServerManager {
       url: this.url,
       detail: this.detail,
       pid: this.proc?.pid ?? null,
+      failure: this.phase === 'error' ? this.failure : null,
+      autoRestart: this.autoRestart ? { ...this.autoRestart } : null,
       resources: this.resolveResources(),
     };
   }
 
   /** 拉起进程并开始 health 轮询;已在跑则原样返回。同步返回,结果看 state()。 */
   start(): TtsServerState {
+    return this.launch(null);
+  }
+
+  /** autoRestart = 自动重启的序号;人点的启动为 null,并取消等着的那次自动重启 */
+  private launch(autoRestart: number | null): TtsServerState {
     if (this.phase !== 'stopped' && this.phase !== 'error') return this.state();
     // 上一代还没退干净(加载超时那条路正在收):此刻 spawn 会撞它占着的端口,等它走完再点
     if (this.proc) return this.state();
+    this.clearRestartTimer();
+    this.autoRestart = autoRestart === null ? null : { attempt: autoRestart, max: TTS_RESTART_MAX, dueAt: null };
     const launch = this.resolveLaunch();
     if ('error' in launch) {
-      this.phase = 'error';
-      this.detail = launch.error;
+      this.fail(launch.error);
       return this.state();
     }
     this.gen++;
@@ -169,10 +218,13 @@ export class TtsServerManager {
       this.proc = null;
       // 只有"我们还在等它活着"时的退出才算异常:停掉(check)与加载超时收尾(fail 已给过原因)都不是新闻
       if (this.phase !== 'starting' && this.phase !== 'running') return;
-      this.fail(
-        `进程退出 code=${code}${this.stderrTail ? `;stderr尾部: ${this.stderrTail.slice(-400)}` : ''}`,
-        { event: 'exit', data: { exitCode: code } },
-      );
+      const detail = `进程退出 code=${code}${this.stderrTail ? `;stderr尾部: ${this.stderrTail.slice(-400)}` : ''}`;
+      this.clearHealthTimer();
+      this.phase = 'error';
+      this.failure = 'crash';
+      this.detail = detail;
+      this.opts.log.emit('warn', 'TTS server 异常', { event: 'exit', data: { detail, exitCode: code } });
+      this.scheduleRestart(detail, code);
     });
     this.beginHealthPolling();
     this.opts.log.info('TTS server 启动中', { pid: proc.pid, url: this.url });
@@ -181,6 +233,8 @@ export class TtsServerManager {
 
   async stop(): Promise<TtsServerState> {
     this.clearHealthTimer();
+    this.clearRestartTimer();
+    this.autoRestart = null;
     this.gen++;
     const proc = this.proc;
     // 进程还在时不能自称 stopped:start 会据此放行,而端口还占着
@@ -221,10 +275,10 @@ export class TtsServerManager {
     return this.pendingShutdown;
   }
 
-  /** 单次健康探测(也用于探测外部自行启动的 server) */
-  async probe(): Promise<boolean> {
+  /** 单次健康探测;base 给出时探那个地址(外部自行启动、不在本机端口上的 server) */
+  async probe(base: string = this.url): Promise<boolean> {
     try {
-      const res = await this.fetchImpl(`${this.url}/health`, { signal: AbortSignal.timeout(2000) });
+      const res = await this.fetchImpl(`${base}/health`, { signal: AbortSignal.timeout(2000) });
       return res.ok;
     } catch {
       return false;
@@ -344,6 +398,9 @@ export class TtsServerManager {
           this.detail = null;
           this.clearHealthTimer();
           this.opts.log.info('TTS server 就绪', { url: this.url });
+          const autoRestart = this.autoRestart?.attempt ?? null;
+          this.autoRestart = null;
+          this.opts.onEvent?.({ kind: 'ready', autoRestart });
           return;
         }
         if (Date.now() - startedAt > timeout) {
@@ -358,11 +415,46 @@ export class TtsServerManager {
     }, interval);
   }
 
-  private fail(detail: string, record: { event?: string; data?: Record<string, unknown> } = {}): void {
+  /** 不经进程退出的失败:拉起失败、缺文件、加载超时。这些不自动重启 */
+  private fail(detail: string): void {
     this.clearHealthTimer();
     this.phase = 'error';
+    this.failure = 'launch';
     this.detail = detail;
-    this.opts.log.emit('warn', 'TTS server 异常', { event: record.event, data: { detail, ...record.data } });
+    this.opts.log.emit('warn', 'TTS server 异常', { data: { detail } });
+    const autoRestart = this.autoRestart?.attempt ?? null;
+    this.autoRestart = null;
+    this.opts.onEvent?.({ kind: 'failed', detail, autoRestart });
+  }
+
+  /** 异常退出按指数退避重启;相邻崩溃间隔超过 RESTART_WINDOW_MS 时计数清零,超过上限后停止重试并报告 */
+  private scheduleRestart(detail: string, exitCode: number | null): void {
+    const now = Date.now();
+    if (this.lastCrashAt > 0 && now - this.lastCrashAt > RESTART_WINDOW_MS) this.crashCount = 0;
+    this.lastCrashAt = now;
+    this.crashCount += 1;
+    if (this.crashCount > TTS_RESTART_MAX) {
+      this.autoRestart = null;
+      this.detail = `${detail};已连续崩溃 ${TTS_RESTART_MAX} 次,不再自动重启`;
+      this.opts.onEvent?.({ kind: 'crash', detail, exitCode, attempt: 0, max: TTS_RESTART_MAX, delayMs: 0 });
+      return;
+    }
+    const attempt = this.crashCount;
+    const delayMs = (this.opts.restartBackoffMs ?? RESTART_BACKOFF_MS) * 2 ** (attempt - 1);
+    this.autoRestart = { attempt, max: TTS_RESTART_MAX, dueAt: now + delayMs };
+    this.detail = `${detail};${Math.round(delayMs / 1000)} 秒后自动重启(第 ${attempt}/${TTS_RESTART_MAX} 次)`;
+    this.opts.log.info(`TTS server 将在 ${Math.round(delayMs / 1000)} 秒后自动重启(第 ${attempt}/${TTS_RESTART_MAX} 次)`);
+    this.opts.onEvent?.({ kind: 'crash', detail, exitCode, attempt, max: TTS_RESTART_MAX, delayMs });
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      this.launch(attempt);
+    }, delayMs);
+    this.restartTimer.unref?.();
+  }
+
+  private clearRestartTimer(): void {
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = null;
   }
 
   private clearHealthTimer(): void {

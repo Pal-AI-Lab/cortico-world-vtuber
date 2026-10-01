@@ -65,7 +65,7 @@ import {
   type TtsStreamSink,
   type TtsSynthProfile,
 } from './tts.ts';
-import { TtsServerManager, type TtsServerState } from './tts-server.ts';
+import { TtsServerManager, type TtsServerEvent, type TtsServerState } from './tts-server.ts';
 import { modelsRoot, runtimesRoot } from 'cortico/paths.ts';
 import { ModelStore, type ModelId, type ModelState } from './runtime/models.ts';
 import { PINNED_RELEASE, defaultBackend, planFor, type Backend, type ReleasePlan } from './runtime/release.ts';
@@ -1330,6 +1330,13 @@ export class VtuberWorld implements World {
   /** 本声线是否已经报过一次「估计切到实测」;换声线时随 epoch 复位 */
   private speechRateAnnounced = false;
   private readonly ttsServer: TtsServerManager;
+  /** 已向 bot 报过 TTS 进程崩溃、还没报恢复 */
+  private ttsDown = false;
+  /**
+   * 合成失败已向 bot 交代过的调用(键见 synthFailKey):回执里报过 TTS 不可用的,或已发过一条合成失败事件的。
+   * 同一次调用后续的失败不再逐条报;TTS 恢复就绪时清空。
+   */
+  private readonly synthFailReported = new Set<string>();
   private readonly runtimeStore: RuntimeStore;
   private readonly modelStore: ModelStore;
   /** 本平台的发布计划;null = 没有现成构建,只能自备目录 */
@@ -1458,6 +1465,7 @@ export class VtuberWorld implements World {
       alignerAudioFile: opts.ttsAlignerAudioFile,
       port: ttsPort,
       log: this.log,
+      onEvent: (event) => this.onTtsServerEvent(event),
     });
     this.modelProfileOpt = opts.modelProfile;
     this.packDir = opts.packDir?.trim() || EXAMPLE_PACK_DIR;
@@ -1630,6 +1638,93 @@ export class VtuberWorld implements World {
     }
     this.tracePerf('注入', 'VTS 重新认证成功', { level: 'warn' });
     this.pushPerfFault('[演出] VTS 重新认证成功,自动重连已恢复。');
+  }
+
+  /** TTS 进程崩溃与恢复转告 bot;面板上的状态由 ttsConsole 自己读 */
+  private onTtsServerEvent(event: TtsServerEvent): void {
+    if (event.kind === 'crash') {
+      this.ttsDown = true;
+      this.tracePerf('TTS', `服务进程退出 code=${event.exitCode}${event.attempt > 0 ? `,${Math.round(event.delayMs / 1000)} 秒后自动重启(第 ${event.attempt}/${event.max} 次)` : ',不再自动重启'}`, {
+        level: 'warn',
+        event: 'server-crash',
+        data: { exitCode: event.exitCode, attempt: event.attempt, max: event.max, delayMs: event.delayMs },
+      });
+      this.pushPerfFault(
+        event.attempt > 0
+          ? `[演出] TTS 服务进程崩溃退出(code=${event.exitCode}),约 ${Math.round(event.delayMs / 1000)} 秒后自动重启`
+            + `(第 ${event.attempt}/${event.max} 次)。重启就绪之前 vtuber_act 的台词没有声音,字幕也不上屏。`
+          : `[演出] TTS 服务进程崩溃退出(code=${event.exitCode}),已连续崩溃 ${event.max} 次,不再自动重启。`
+            + 'TTS 现在停着,vtuber_act 的台词没有声音,字幕也不上屏,要等人在控制台重新启动。',
+      );
+      return;
+    }
+    if (event.kind === 'ready') {
+      // server 换了一个进程:下一次合成时重探流式能力,不吃 30s 缓存
+      this.streamProbeAt = 0;
+      this.synthFailReported.clear();
+      if (!this.ttsDown) return;
+      this.ttsDown = false;
+      this.tracePerf('TTS', '服务进程恢复就绪', { level: 'info', event: 'server-recovered', data: { autoRestart: event.autoRestart } });
+      this.pushPerfFault(
+        `[演出] TTS 服务已恢复(${event.autoRestart !== null ? `自动重启第 ${event.autoRestart} 次后就绪` : '人工启动后就绪'}),`
+          + 'vtuber_act 的台词恢复出声和字幕。',
+      );
+      return;
+    }
+    // 不经进程退出的失败只在 bot 已被告知 TTS 挂了时才转告:平常的启动失败是面板上点出来的,人当场就看见
+    if (!this.ttsDown && event.autoRestart === null) return;
+    this.ttsDown = true;
+    this.pushPerfFault(
+      `[演出] TTS 服务${event.autoRestart !== null ? `自动重启(第 ${event.autoRestart} 次)` : '启动'}没起来:${event.detail}。`
+        + 'TTS 现在停着,不会再自动重启,vtuber_act 的台词没有声音,字幕也不上屏,要等人在控制台处理。',
+    );
+  }
+
+  /** 这次调用的去重键;无源调用(控制台演出等)按轮次记 */
+  private synthFailKey(callId: string | null, roundId: number): string {
+    return callId ?? `round#${roundId}`;
+  }
+
+  /** 合成失败的台词没出声也没上字幕;每次调用只报第一条,回执里已报过 TTS 不可用的不再报 */
+  private onSynthFailed(info: { roundId: number; callId: string | null; text: string; error: string }): void {
+    const key = this.synthFailKey(info.callId, info.roundId);
+    if (this.synthFailReported.has(key)) return;
+    this.synthFailReported.add(key);
+    const call = info.callId ? `vtuber_act(call_id=${info.callId})` : `演出轮#${info.roundId}`;
+    this.pushPerfFault(
+      `[演出] ${call} 有台词合成失败,这段没有声音,字幕也没上屏:「${info.text}」。错误:${info.error}。`
+        + `${this.ttsStatusText(null)}。这次调用后面若还有台词合成失败,不再逐条报。`,
+    );
+  }
+
+  /**
+   * TTS 服务此刻的状态,一句话。reachable 是对 ttsUrl 的探测结果;
+   * 本 World 没起 server(stopped)时只有它说明得了外部 server 在不在,null 表示没探。
+   */
+  private ttsStatusText(reachable: boolean | null): string {
+    const st = this.ttsServer.state();
+    switch (st.phase) {
+      case 'running':
+        return 'TTS 服务运行中';
+      case 'starting':
+        return st.autoRestart
+          ? `TTS 服务正在自动重启(第 ${st.autoRestart.attempt}/${st.autoRestart.max} 次),进程已拉起,模型加载中`
+          : 'TTS 服务启动中,模型加载中';
+      case 'stopping':
+        return 'TTS 服务正在停止';
+      case 'stopped':
+        return reachable === null
+          ? 'TTS 服务未由本 World 启动'
+          : `TTS 服务未由本 World 启动,${this.ttsUrl} ${reachable ? '可达' : '不可达'}`;
+      case 'error':
+        if (st.failure === 'crash') {
+          return st.autoRestart?.dueAt != null
+            ? `TTS 服务进程崩溃退出,约 ${Math.max(0, Math.round((st.autoRestart.dueAt - Date.now()) / 1000))} 秒后自动重启`
+              + `(第 ${st.autoRestart.attempt}/${st.autoRestart.max} 次)`
+            : 'TTS 服务进程连续崩溃,已停,不再自动重启,要人在控制台启动';
+        }
+        return `TTS 服务启动失败,已停:${st.detail}`;
+    }
   }
 
   onHandoffEnded(): void {
@@ -2662,6 +2757,7 @@ export class VtuberWorld implements World {
       onCue: (cues) => this.stream.emit('cue', { cues }),
       onSubtitle: (payload) => this.stream.emit('subtitle', payload),
       onSubtitleCut: () => this.emitSubtitleCut('外部播放被截断'),
+      onSynthFailed: (info) => this.onSynthFailed(info),
     });
     this.performer.start();
     // 失真滚动摘要:每窗口一行,计数全零那一窗不发。
@@ -3343,12 +3439,29 @@ export class VtuberWorld implements World {
         `先听着,说完并安静一阵后我会提醒你;确实需要现在插话,就用 vtuber_interrupt 打断自己再说。`
       ));
     }
+    /*
+     * 合成走 ttsUrl;本 World 起的 server 在 running 就不再探,其余阶段(含没由本 World 起、
+     * 外部自备 server 的情形)以探测为准。台词照常排入,合成失败的片跳过,字幕只随播出的语音上屏。
+     */
+    const ttsPhase = this.ttsServer.state().phase;
+    const ttsReachable = ttsPhase === 'running' ? null : await this.ttsServer.probe(this.ttsUrl);
+    // 探测期间 World 可能已停
+    if (!this.performer) return receipt('[vtuber_act 失败] World 未启动');
+    const ttsUnavailable = ttsReachable === false;
+    if (ttsUnavailable && callId !== null) this.synthFailReported.add(callId);
     if (!streamed) {
       // 没走流式 tap 的整段演出同样过禁播词滤除,两条路口径一致
       const cleaned = this.cleanMutedScript(script);
       const h = this.performer.beginRound({ callId });
       h.feed(cleaned);
       h.end();
+    }
+    if (ttsUnavailable) {
+      return receipt(
+        `[vtuber_act 没出声] TTS 不可用:${this.ttsStatusText(false)}。`
+          + '这段台词没有声音,字幕也不会上屏(字幕只随播出的语音显示)。'
+          + `${this.performer.statusLine()}`,
+      );
     }
     const note =
       decision.backlogMs > 0

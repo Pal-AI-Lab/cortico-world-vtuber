@@ -273,6 +273,11 @@ export interface PerformerDeps {
   }) => void;
   /** 外部播放被截断时使当前字幕失效。 */
   onSubtitleCut?: () => void;
+  /**
+   * 一片(流式路为一段)合成失败:这段跳过,没有声音,字幕只随播出的语音发,所以也没上屏。
+   * 所属轮已被抢占或编排器已停的不报。
+   */
+  onSynthFailed?: (info: { roundId: number; callId: string | null; text: string; error: string }) => void;
   /** 演出关键事件的旁路日志(轮/拍/TTS/cue/模式…);不提供则静默。opts.level 见 TraceOptions */
   trace?: (area: string, msg: string, opts?: TraceOptions) => void;
   rng?: () => number;
@@ -1410,6 +1415,9 @@ export class Performer {
       next.failed = true;
       this.trace('TTS', `合成失败,跳过:「${next.text.slice(0, 18)}」 ${String(err).slice(0, 80)}`);
       this.d.log.warn('TTS 合成失败,该片跳过', { text: next.text.slice(0, 30), err: String(err) });
+      if (!next.round.dropped && !this.stopped) {
+        this.d.onSynthFailed?.({ roundId: next.round.id, callId: next.round.callId, text: next.text, error: String(err) });
+      }
     } finally {
       next.synthing = false;
     }
@@ -1526,6 +1534,7 @@ export class Performer {
       if (!piece.round.dropped && !this.stopped) {
         this.trace('TTS', `流式合成失败,该段跳过:「${seg.text.slice(0, 18)}」 ${String(err).slice(0, 80)}`);
         this.d.log.warn('TTS 流式合成失败,该段跳过', { text: seg.text.slice(0, 30), err: String(err) });
+        this.d.onSynthFailed?.({ roundId: piece.round.id, callId: piece.round.callId, text: seg.text, error: String(err) });
       }
     } finally {
       seg.synthing = false;
