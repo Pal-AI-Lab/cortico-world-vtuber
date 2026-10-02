@@ -46,7 +46,7 @@
     "@types/node": "^22.10.0",
     "@types/tar-stream": "^3.1.4",
     "@types/ws": "^8.5.13",
-    "cortico": "^0.1.4",
+    "cortico": "^0.1.5",
     "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
     "tsx": "^4.19.2",
