@@ -1137,11 +1137,14 @@ export const HANDOFF_NOTE =
   '看不到不等于没说过。观众还在听,现在就调 vtuber_act 开口和他们互动。';
 
 /** 已注册的演出工具声明(schema);World 与子进程代理共用,handler 各自绑定。
- * 用法说明只写在 ENV_PROMPT.md(可编辑)与这里的 description,不再另开前缀段。 */
-export const VTUBER_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = [
+ * 用法说明只写在 ENV_PROMPT.md(可编辑)与这里的 description,不再另开前缀段。
+ * streamsOutput 在类型上另行声明:开发期依赖的 Core 类型还没有这个字段,不认它的 Core 运行时忽略它。 */
+export const VTUBER_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'> & { streamsOutput?: boolean }> = [
   {
     name: 'vtuber_act',
     tags: ['speak'],
+    // 输出旁路在参数流里就开演,Core 的屏障不跳过它,回执是这次演出的真实结果
+    streamsOutput: true,
     description:
       'ONLY way the audience hears or sees you. Put speech and performance tags (【】 blocking, <> inline, [] vocal) in the script argument; never put them in assistant message content (content is silent on stream).',
     parameters: {
